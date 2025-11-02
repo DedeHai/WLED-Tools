@@ -2,6 +2,15 @@
 
 A browser-based paint tool for 2D and 1D setups that allows you to directly draw whatever your heart desires and directly upload the result to your WLED controller.
 
+## 2D editor
+
+<img width="1298" height="1389" alt="image" src="https://github.com/user-attachments/assets/bcbd159c-fedd-4a90-a386-cf3a98358bb1" />
+
+## 1D editor
+
+<img width="833" height="1185" alt="image" src="https://github.com/user-attachments/assets/504f8241-3557-49ce-bfda-7a0bcc6f9692" />
+
+
 ## Features
 
 - **Drawing Tools**
