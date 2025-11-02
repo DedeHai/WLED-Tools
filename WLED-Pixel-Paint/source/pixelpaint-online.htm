@@ -808,7 +808,7 @@
 			if(!prvEn||!curSeg)return;
 			let interval=20,isRefresh=false;
 			if(!diffList){
-			diffList=matrix.slice(0,mW.value).map((c,i)=>({idx:i,hex:c2h(c.r,c.g,c.b)})); // mW = matrix width (or strip length)
+			diffList=matrix.map((c,i)=>({idx:i,hex:c2h(c.r,c.g,c.b)}));
 			interval=40;
 			isRefresh=true;
 			}
@@ -816,7 +816,7 @@
 			diffList.sort((a,b)=>a.idx-b.idx);
 			let chunk=[];
 			for(let d of diffList){
-			if(d.idx>=mW.value)continue;
+			if(d.idx>=matrix.length)continue;
 			chunk.push((curSeg.start||0)+d.idx,d.hex);
 			if(chunk.length>=maxColInd*2){
 				if(isRefresh&&painting)return;
@@ -830,7 +830,7 @@
 			await new Promise(r=>setTimeout(r,interval));
 			}
 			for(let d of diffList){
-			if(d.idx<mW.value)lastSentMtx[d.idx]=d.hex;
+			if(d.idx<matrix.length)lastSentMtx[d.idx]=d.hex;
 			}
 		}
 
@@ -839,7 +839,7 @@
 			prvTmr=setTimeout(async()=>{
 			prvTmr=null;
 			const diff=[];
-			for(let i=0;i<mW.value;i++){
+			for(let i=0;i<matrix.length;i++){
 				const c=matrix[i];
 				const hex=c2h(c.r,c.g,c.b);
 				if(lastSentMtx[i]!==hex)diff.push({idx:i,hex});
