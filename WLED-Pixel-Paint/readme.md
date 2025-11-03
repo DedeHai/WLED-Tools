@@ -26,13 +26,13 @@ A browser-based paint tool for 2D and 1D setups that allows you to directly draw
   - Any change shows up on the LEDs immediately
   - Updates are sent as json commands over websocket, http as a (slow) fallback
   - Preview is highly responsive by only sending changed pixels with a full redraw when painting ends
-  - By using the json interface, single segments can be painted, allowing to draw overlapping segments or multi-segment setups (as opposed to using the faster DDP protocol)
+  - By using the json interface, single segments can be painted, allowing to draw overlapping segments or multi-segment setups and backwards compatibility (tested with 0.14.4)
   - avoids parallel connections to not overwhelm the ESP, requests are sent sequentially
 
 - **1D and 2D Modes**
   - Automatically switches between strip and matrix layout based on selected segment
   - In 1D mode, there is an overview of the full strip at the top with "zoomed" rows to set individual pixels
-  - In 2D mode, the matrix size can be manually adjusted to paint higher resolution images and safe them as GIFs, up to 128x128 pixels
+  - In 2D mode, the matrix size can be manually adjusted to paint higher resolution images and save them as GIFs, up to 128x128 pixels
 
 - **Responsive Interface**
   - Works on desktop and touch devices
