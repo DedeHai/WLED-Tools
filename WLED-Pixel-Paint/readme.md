@@ -14,19 +14,20 @@ A browser-based paint tool for 2D and 1D setups that allows you to directly draw
 ## Features
 
 - **Drawing Tools**
-  - Brush, fill and smear (1D & 2D)
+  - Brush, rainbop brush, fill and smear (1D & 2D)
   - Line, rectangle, circle (2D only)
   - Adjustable brush size and hardness is used by all tools
-  - Undo function up to 10 steps
+  - Undo and redo function up to 50 steps
 
 - **Color Picker**
   - using the familiar iro.js color wheel from the main WLED UI
 
 - **Live Preview**
-  - Any change shows up on the LEDs immediately
+  - Any change shows up on the LEDs immediately on the chosen segment
+  - If "Freeze Segment" is checked, segment keeps displaying the painting even if the page is closed
   - Updates are sent as json commands over websocket, http as a (slow) fallback
   - Preview is highly responsive by only sending changed pixels with a full redraw when painting ends
-  - By using the json interface, single segments can be painted, allowing to draw overlapping segments or multi-segment setups and backwards compatibility (tested with 0.14.4)
+  - By using the json interface, single segments can be painted, allowing to draw overlapping segments, multi-segment setups and backwards compatibility (tested with 0.14.4)
   - avoids parallel connections to not overwhelm the ESP, requests are sent sequentially
 
 - **1D and 2D Modes**
@@ -39,17 +40,37 @@ A browser-based paint tool for 2D and 1D setups that allows you to directly draw
   - Layout automatically adjusts depending on editor mode or screen size
 
 - **Save directly to WLED Controller**
-  - Saves 1D paintings directly as WLED presets
-  - 2D paintings are converted to GIF and upload directly to WLED’s filesystem
+  - Saves paintings directly to the controller as WLED presets or GIFs: requires gif player
+
+Note: GIF for 1D only works up to 320 pixels in 0.14 and 0.15
+
 
 ## Installation
 
 Download the `pixelpaint.htm.gz` file, connect to your controller, go to the file editor (`ip-address/edit`) and upload the file. Open the pixel paint by navigating to `ip-address/pixelpaint.htm`.
-In **WLED version 0.14** the .gz format is not supported, use the uncompressed `pixelpaint.htm` instead.
-The "online" version requires an internet connection on the client side i.e. your PC or phone **NOT** the controller! It is required to download external libraries (iro.js and omggif.js).
-In order to display the gif's you create you also require the WLED gif-player (2D only).
+In **WLED version 0.14** the .gz format is not supported, use the uncompressed `pixelpaint.htm` instead. Moon-Modules fork supports the .gz format.
+The "online" version requires an internet connection on the client side i.e. your PC or phone, internet is **NOT** needed for the controller! This is used to download external libraries (iro.js and omggif.js).
+In order to display the GIFs you create you also require the WLED GIF-player (available by default in 0.16 and Moon-Modules).
 
 ## License
 
 Licensed under **EUPL v1.2 or later**.
 Author: **@dedehai**
+
+## Changelog
+
+### Version 1.0
+initial release with base Features
+
+### Version 1.1
+- rainbow paint
+- image import
+- GIF export also for 1D
+- JSON preset export also for 2D
+- color reduction if JSON export fails i.e. does not fail anymore if too large
+- LED numbers shown above row-display in 1D
+- improved GIF-palette calculation for better color accuracy
+- increased undo steps to 50
+- added "redo" function
+- slight changes in UI
+- various bugfixes
