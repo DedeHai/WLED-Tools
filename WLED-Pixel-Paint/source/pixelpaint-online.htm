@@ -187,7 +187,7 @@
 	<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v1.1</div>
 	<div class="title">WLED <span class="rb">PIXEL</span> Paint</div>
 	<div class="matrix-controls">
-		<h3 style="margin-top:20px;">Target Segment</h3>
+		<h3>Target Segment</h3>
 		<select id="seg"><option value="0" data-w="16" data-h="16">Segment 0 (16x16)</option></select>
 		<div class="size-inputs">
 			<span class="led-count-1d" style="display:none;">LEDs: </span>
@@ -200,11 +200,12 @@
 		</div>
 		<div><input type="checkbox" id="frz" checked> Freeze Segment</div>
 	</div>
-	<div style="margin-bottom: 16px;">
+	<div style="margin-top: 16px; margin-bottom: 16px;">
 		<button onclick="openImage()" title="Open Image" class="tool-btn action"><span>&#xf07c;</span></button>
 		<input type="file" id="imgFile" accept="image/*" style="display:none">
 		<button onclick="clearMatrix()" title="Clear" class="tool-btn"><span>&#xf00d;</span></button>
 		<button onclick="undo()" title="Undo" class="tool-btn"><span>&#xe967;</span></button>
+		<button onclick="redo()" title="Redo" class="tool-btn"><span style="display: inline-block; transform: scaleX(-1);">&#xe967;</span></button>
 	</div>
 	<div class="main-content">
 		<div class="tools-wrapper">
@@ -287,7 +288,7 @@
 		let w = DEFAULT_MATRIX, h = DEFAULT_MATRIX, matrix = [], segs = [], curSeg = null;
 		let painting = false, tool = 5, startPt = null, lastPos = null, preview = null;
 		let iroPicker, brushSize = 1, brushHard = 100, hue = 0;
-		let undoStack = [];
+		let undoStack = []; let redoStack = [];
 		let ws = null, prvEn = false, maxColInd = null, prvTmr = null;
 		let lastSentMtx = [], wu = '', loc = false, snapMtx = null;
 		let is1D = false, wrapW = 50, rowCanv = [], selRow = 0;
@@ -412,7 +413,14 @@
 
 				const wrap=document.createElement('div');
 				wrap.className='row-canvas-wrapper';
+				wrap.style.position='relative';
 				if(ri===0)wrap.classList.add('selected');
+
+				// Add pixel number label
+				const label=document.createElement('div');
+				label.style.cssText='font-size:10px;color:#999;display:flex;justify-content:space-between;padding:0 2px;position:absolute;top:-24px;left:0;right:0;pointer-events:none;width:'+(rw*LED_PX_SIZE)+'px;';
+				label.innerHTML=`<span>${si}</span><span>${ei-1}</span>`;
+				wrap.appendChild(label);
 
 				const cv=document.createElement('canvas');
 				cv.width=rw*LED_PX_SIZE;
@@ -534,11 +542,22 @@
 		function saveState(){
 			undoStack.push(matrix.map(c=>({r:c.r,g:c.g,b:c.b})));
 			if(undoStack.length>50)undoStack.shift(); // fixed undo stack size of 50 to not use excessive RAM on the device
+			redoStack = []; // clear redo stack on new action
 		}
 
 		function undo(){
 			if(undoStack.length){
+				redoStack.push(matrix.map(c=>({r:c.r,g:c.g,b:c.b})));
 				matrix=undoStack.pop();
+				drawAll();
+				if(prvEn) sendDirty();
+			}
+		}
+
+		function redo(){
+			if(redoStack.length){
+				undoStack.push(matrix.map(c=>({r:c.r,g:c.g,b:c.b})));
+				matrix=redoStack.pop();
 				drawAll();
 				if(prvEn) sendDirty();
 			}
@@ -1017,7 +1036,7 @@
 				}
 				const pix=new Uint8Array(gw*gh*4);
 				for(let i=0;i<gw*gh;i++){
-					const c=matrix[i];
+					const c=matrix[i]||matrix[w*h-1]; // pad with last pixel if out of bounds
 					pix[i*4]=c.r;pix[i*4+1]=c.g;pix[i*4+2]=c.b;pix[i*4+3]=255;
 				}
 				const id=new ImageData(new Uint8ClampedArray(pix),gw,gh);
