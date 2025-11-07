@@ -994,13 +994,6 @@
 			return{indexed:idx,palette:pal};
 		}
 
-		// add padding to pallete (conform with gif standard)
-		function palPad(pal){
-			let p2=1;
-			while(p2<pal.length)p2<<=1;
-			while(pal.length<p2)pal.push(pal[pal.length-1]);
-			return pal;
-		}
 		// calculate optimal grid dimensions for 1D pixel data (gif is restricted to 320x320)
 		function grid(length) {
 			if (length <= 320) return { w: length, h: 1 };
