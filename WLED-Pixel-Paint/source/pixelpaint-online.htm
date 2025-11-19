@@ -1022,11 +1022,8 @@
 			}catch(e){console.error('Error fetching file list:',e);}
 			if(exists&&!confirm(`${fn} already exists. Do you want to overwrite it?`))return;
 			try{
-				let gw = w, gh = h; // gif width and height
-				if(is1D){
-					const g = grid(w); // calculate optimal grid size
-					gw = g.w; gh = g.h;
-				}
+				const g = grid(w); // calculate optimal grid size: 1D image is saved as "2D gif" if w > 320 (WLED gif size limit), 2D can not be larger than 256x256 so is unchanged
+				let gw = g.w, gh = Math.max(g.h, h); // gif width and height
 				const pix=new Uint8Array(gw*gh*4);
 				for(let i=0;i<gw*gh;i++){
 					const c=matrix[i]||matrix[w*h-1]; // pad with last pixel if out of bounds
