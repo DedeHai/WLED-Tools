@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+<meta name="author" content="@dedehai">
+<meta name="license" content="EUPL v. 1.2 or later">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="stylesheet" href="style.css">
+<title>WLED VideoLab</title>
+
+<!-- omggif from CDN for GIF export (used to build indexed GIFs) -->
+<script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
+<script src="common.js"></script>
+<style>
+body {
+	font-family: Verdana, sans-serif;
+	font-size: 1rem;
+	text-align: center;
+	background: #222;
+	color: #fff;
+	line-height: 200%;
+	margin: 0 auto;
+	padding: 8px;
+	max-width: 800px;
+	box-sizing: border-box;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+.title {
+	font-size: 28px;
+	font-weight: bold;
+	padding: 12px 0;
+	margin-bottom: 12px;
+}
+.title .rb {
+	background: repeating-linear-gradient(
+		#f55 0 4px, #222 4px 5px,
+		#6f6 5px 10px, #222 10px 11px,
+		#88f 11px 16px, #222 16px 17px
+	);
+	background-size: 100% 17px;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: rgbshift 4s linear infinite;
+	font-size: 36px;
+}
+@keyframes rgbshift { to { background-position: 0 34px; } }
+
+.drop, .editor, .presets {
+	background: #222;
+	border-radius: 8px;
+	margin: 20px auto;
+}
+.drop {
+	border: 2px dashed #555;
+	padding: 40px 20px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	max-width: 60%;
+	text-align: center;
+}
+.drop:hover {
+	border-color: #48a;
+	background: #333;
+}
+
+.editor {
+	display: none;
+	padding: 20px;
+}
+.editor.active { display: block; }
+
+.ctrlw {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	align-items: center;
+	width: 100%;
+}
+
+.cropw {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	justify-content: center;
+	margin: 15px 0;
+}
+
+#canvas, #pv, #prev {
+	background: #333;
+	border: 2px solid #555;
+	border-radius: 8px;
+}
+#canvas {
+	cursor: crosshair;
+	max-width: 100%;
+	touch-action: none;
+}
+#pv {
+	image-rendering: pixelated;
+	border-radius: 4px;
+}
+
+.slrow {
+	text-align: center;
+	margin-bottom: 5px;
+	width: 100%;
+	max-width: 500px;
+}
+.slrow label { display: block; margin-bottom: 5px; }
+.slider { width: 100%; }
+
+.toast {
+	position: fixed;
+	top: 20px;
+	right: 20px;
+	background: #555;
+	color: #fff;
+	padding: 12px 20px;
+	border-radius: 8px;
+	font-size: 14px;
+	z-index: 9999;
+	border: 2px solid #888;
+}
+
+button, .btn, input, select {
+	background: #333;
+	color: #fff;
+	font-family: Verdana, sans-serif;
+	border: 0.5ch solid #333;
+	font-size: medium;
+	margin: 2px;
+}
+button, .btn {
+	border-radius: 24px;
+	font-size: 20px;
+	margin: 8px 4px;
+	padding: 8px 12px;
+	min-width: 48px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+button:hover, .btn:hover {
+	background: #555;
+	border-color: #555;
+}
+button.sml {
+  padding: 8px 12px;
+  border-radius: 25px;
+  font-size: 15px;
+  min-width: 45px;
+  margin: 0 0 0 10px;
+}
+
+#video, #file { display: none; }
+
+.presets { padding: 15px; }
+.presets h3 { margin-top: 0; }
+
+.prow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 0;
+}
+.prow button {
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dialog {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	background: #333;
+	padding: 25px;
+	border-radius: 8px;
+	border: 2px solid #555;
+	z-index: 10000;
+	min-width: 320px;
+	display: none;
+	text-align: center;
+}
+.dialog.active { display: block; }
+.dialog input {
+	width: 80%;
+	background: #555;
+	border: none;
+	color: #fff;
+	padding: 8px 14px;
+	border-radius: 4px;
+	margin: 10px auto;
+	display: block;
+}
+
+.vctrl {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	max-width: 800px;
+	margin-top: 8px;
+}
+.prow2 {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	width: 100%;
+}
+.brow {
+	display: flex;
+	justify-content: center;
+	gap: 10px;
+	width: 100%;
+}
+.bcont { display: flex; gap: 10px; }
+.spacer { flex: 1; }
+.spcont {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.pwrap {
+	position: relative;
+	flex: 1;
+	height: 18px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.pbar {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 100%;
+	height: 6px;
+	background: linear-gradient(90deg, #08d 0%, #08d 100%);
+	border-radius: 6px;
+	outline: none;
+	cursor: pointer;
+	position: relative;
+	z-index: 1;
+}
+.pbar::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 14px;
+	height: 14px;
+	background: #fff;
+	border-radius: 50%;
+	border: 2px solid #08d;
+	box-shadow: 0 0 6px rgba(0,0,0,0.6);
+}
+.tdisp {
+	font-size: 14px;
+	color: #ccc;
+	min-width: 90px;
+	text-align: right;
+}
+
+/* loop region highlight */
+.lregn {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	height: 8px;
+	background: rgba(8, 141, 255, 0.25);
+	border-radius: 4px;
+	pointer-events: none;
+	z-index: 0;
+}
+
+/* draggable markers */
+.lmark {
+	position: absolute;
+	top: 50%;
+	transform: translate(-50%,-50%);
+	width: 14px;
+	height: 20px;
+	background: transparent;
+	border-radius: 2px;
+	z-index: 2;
+	cursor: ew-resize;
+	touch-action: none;
+}
+.lmark::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	width: 3px;
+	height: 100%;
+	background: #4af;
+	box-shadow: 0 0 4px rgba(0,0,0,0.6);
+}
+.lmark.start::before {
+	left: 0;
+	border-radius: 2px 0 0 2px;
+	border-left: 2px solid #08d;
+}
+.lmark.end::before {
+	right: 0;
+	border-radius: 0 2px 2px 0;
+	border-right: 2px solid #08d;
+}
+
+#url {
+	flex: 1;
+	padding: 6px;
+	border-radius: 8px;
+}
+
+.exrow {
+	display:flex;
+	gap:8px;
+	align-items:center;
+	justify-content:center;
+	margin-top:6px;
+}
+
+input[type="number"] { width: 4em; }
+input[type="color"] {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	padding: 0;
+	border-width: 0;
+}
+
+#ovlay {
+	position: fixed;
+	inset: 0;
+	display: none;
+	z-index: 9998;
+}
+#ovlay.loading {
+	display: block;
+	background: rgba(0,0,0,0.6);
+}
+#ovlay.loading::after {
+	content: "Processing...";
+	position: absolute;
+	left: 50%;
+	top: 45%;
+	transform: translate(-50%, -50%);
+	background: #222;
+	padding: 12px 18px;
+	border-radius: 8px;
+	border: 2px solid #444;
+	color: #fff;
+	font-size: 16px;
+}
+
+@media (max-width: 600px) {
+	.vctrl { flex-direction: column; }
+	.prow2 { order: -1; }
+	.brow { justify-content: center; flex-wrap: wrap; }
+	.spcont { width: 100%; justify-content: center; }
+	input[type="range"] { min-width: 120px; width: 60%; }
+}
+</style>
+</head>
+<body>
+<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.9B</div>
+<div class="cont">
+	<div class="title">WLED <span class="rb">VideoLab</span></div>
+
+	<h3 style="margin-top:20px;">Target Segment</h3>
+	<select id="seg"><option value="0" data-w="16" data-h="16">Segment 0 (16x16)</option></select>
+
+	<h3>Load Video</h3>
+
+	<div id="dropz" class="drop">
+		<p>Drop video or click to select</p>
+	</div>
+	<input type="file" id="file" accept="video/*">
+
+	<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+		<div style="flex-basis:100%;">Play from CORS enabled URL: </div>
+		<input type="text" id="url">
+		<button class="sml" id="loadU" title="Play URL">▶</button>
+	</div>
+  <div>
+    Examples:<br/>
+    https://cdn.pixabay.com/video/2025/04/13/271793_tiny.mp4<br/>
+    https://cdn.pixabay.com/video/2025/11/13/315721_tiny.mp4<br/>
+    https://cdn.pixabay.com/video/2023/01/08/145766-787427612_tiny.mp4
+  </div>
+	<div class="presets" id="prests" style="display:none;">
+		<h3>Saved Video Presets</h3>
+		<div id="plist"></div>
+	</div>
+
+	<div class="editor" id="editor">
+		<div class="cropw">
+			<button class="sml" id="mAsp">Match Aspect Ratio</button>
+			<button class="sml" id="mSize">Match Size (1:1)</button>
+			<button class="sml" id="fSize">Full Size</button>
+			<button class="sml" id="rCrop">Reset</button>
+		</div>
+
+		<div class="ctrlw">
+			<div style="width:100%">
+				<canvas id="canvas" width="800" height="600"></canvas>
+			</div>
+
+			<div class="vctrl" id="vctrl" style="display:none;">
+				<div class="prow2">
+					<div class="pwrap" id="pwrap">
+						<div class="lregn" id="lregn" style="left:0; width:0;"></div>
+						<div class="lmark start" id="lstart" title="Loop start"></div>
+						<div class="lmark end" id="lend" title="Loop end"></div>
+						<input type="range" id="prog" min="0" max="100" value="0" step="0.1" class="pbar" aria-label="progress">
+					</div>
+					<span id="tdisp" class="tdisp">0:00 / 0:00</span>
+				</div>
+				<div class="brow">
+					<div class="spacer"></div>
+					<div class="bcont">
+						<button id="play" class="sml" title="Play/Pause">⏸</button>
+						<button id="mute" class="sml" title="Mute/unmute">🔊</button>
+						<button id="stop" class="sml" title="Stop">⏹</button>
+					</div>
+					<div class="spcont">
+						<input type="range" id="speed" min="0.1" max="4" step="0.1" value="1">
+						<span class="value" id="spLbl">1.0x</span>
+					</div>
+					<div class="spacer"></div>
+				</div>
+			</div>
+
+			<small>Preview at target resolution</small>
+			<canvas id="pv"></canvas>
+
+			<div class="slrow">
+				<label>Dark Pixel Cutoff: <span id="btVal">0</span></label>
+				<input type="range" id="bt" min="0" max="255" value="0" class="slider">
+			</div>
+
+			<div class="slrow">
+				<label>Brightness: <span id="brVal">255</span></label>
+				<input type="range" id="br" min="0" max="255" value="255" class="slider">
+			</div>
+
+			<div class="slrow">
+				<label>Gamma Correction: <span id="gmVal">2.2</span></label>
+				<input type="range" id="gm" min="0.1" max="4" step="0.01" value="2.2" class="slider">
+			</div>
+
+			<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0;">
+				<label for="bg">Background Color</label>
+				<input type="color" id="bg" value="#000000">
+			</div>
+		</div>
+		<div class="exrow">
+			<button class="btn" id="saveP" style="display:none;">Save Video Preset</button>
+			<button class="btn" id="expGif" style="display:none;" title="Export preview as GIF">Export GIF</button>
+		</div>
+	</div>
+
+	<div style="text-align:center;margin:20px 0">
+		<button class="btn" onclick="window.location.href=wu">Back to the controls</button>
+	</div>
+	<div style="font-size:12px;color:#666;">by @dedehai</div>
+</div>
+
+<div class="dialog" id="saveDlg">
+	<h3 style="margin-top:0;">Save Video Preset</h3>
+	<label>Name (max 32 chars):</label>
+	<input type="text" id="pname" maxlength="32" placeholder="Enter a name...">
+	<div class="btns" style="display:flex;gap:10px;justify-content:center;margin-top:15px;">
+		<button class="btn" id="saveOk">Save</button>
+		<button class="btn" id="saveCn">Cancel</button>
+	</div>
+</div>
+
+<div class="dialog" id="expDlg">
+	<h3 style="margin-top:0;">Export GIF</h3>
+	<div style="max-width:300px;margin:0 auto;">
+		<div style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+			<label style="min-width:60px;">Name:</label>
+			<input type="text" id="gname" maxlength="32" placeholder="myvideo" style="flex:1;margin:0;">
+		</div>
+		<div style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+			<label style="min-width:60px;">FPS:</label>
+			<input type="number" id="gfps" value="20" min="0.01" max="33" step="1"
+				style="flex:1;background:#555;color:#fff;border-radius:6px;padding:6px;margin:0;" />
+		</div>
+		<div style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+			<label style="min-width:60px;">Colors:</label>
+			<input type="range" id="cdepth" min="4" max="8" step="1" value="8" class="slider" style="flex:1;margin:0;">
+			<span id="colLbl" style="min-width:40px;text-align:right;">256</span>
+		</div>
+	</div>
+	<div class="btns" style="display:flex;gap:10px;justify-content:center;margin-top:15px;">
+		<button class="btn" id="expOk">Export</button>
+		<button class="btn" id="expCn">Cancel</button>
+	</div>
+</div>
+
+<div class="dialog" id="resDlg">
+	<h3 style="margin-top:0;">GIF Ready</h3>
+	<img id="gifPrv" style="margin:10px auto;image-rendering:pixelated;border:1px solid #555;border-radius:8px;display:none;">
+	<p id="gifInf"></p>
+	<div class="btns" style="display:flex;gap:10px;justify-content:center;margin-top:15px;">
+		<button class="btn" id="gifUp">Upload</button>
+		<button class="btn" id="gifDl">Download</button>
+		<button class="btn" id="gifCn">Cancel</button>
+	</div>
+</div>
+
+<div id="ovlay"></div>
+<video id="video" autoplay playsinline loop crossorigin="anonymous"></video>
+
+<script>
+// DOM helpers
+const cvs = gId('canvas'), ctx = cvs.getContext('2d', {willReadFrequently:true});
+const pv = gId('pv'), pvx = pv.getContext('2d', {willReadFrequently:true});
+const vid = gId('video');
+
+let wu = '', ws = null, mw = 32, mh = 32;
+let crop = {x:50, y:50, w:200, h:150}, drag=false, hand=null, offX=0, offY=0;
+let vInp = null, capTmr = null;
+let vRect = {x:0, y:0, w:0, h:0};
+let keepSend = true;
+
+let lStart = 0;	// seconds - loop region start
+let lEnd = null;	// seconds - loop region end (null means full video)
+
+const playBtn = gId('play');
+const muteBtn = gId('mute');
+const prog = gId('prog');
+const tDisp = gId('tdisp');
+const spdSl = gId('speed');
+
+const CAP_INT = 33; // ~30 FPS capture used in live sending
+
+const pWrap = gId('pwrap');
+const lRegn = gId('lregn');
+const lSt = gId('lstart');
+const lEd = gId('lend');
+let mDrag = null;
+
+// --- Initialization ---
+(async()=>{
+	getLoc();
+	const params = new URLSearchParams(window.location.search);
+	wu = `http://${params.get('host')||window.location.host}`;
+	ws = connectWs(()=>console.log('WS connected'));
+	await loadSegs();
+	loadGamma();
+	loadPresets();
+})();
+
+// --- UI message + overlay helpers ---
+function msg(txt, typ){
+	const el = document.createElement('div');
+	el.className='toast';
+	el.textContent=txt;
+	if(typ==='error') el.style.background='#d32f2f';
+	document.body.appendChild(el);
+	setTimeout(()=>el.remove(), 3000);
+}
+
+function ovShow(){
+	const ov = gId('ovlay');
+	if(!ov) return;
+	ov.style.display = 'block';
+	ov.classList.add('loading');
+}
+function ovHide(){
+	const ov = gId('ovlay');
+	if(!ov) return;
+	ov.classList.remove('loading');
+	ov.style.display = 'none';
+}
+
+// --- Segment loading ---
+async function loadSegs(){
+	const sel = gId('seg');
+	try{
+		const r = await fetch(`${wu}/json/state`), j = await r.json();
+		sel.innerHTML = '';
+		if(j.seg && j.seg.length){
+			j.seg.forEach(({id, n, start, stop, startY, stopY})=>{
+				const sw = (stop - start) || 1;
+				const sh = (stopY - startY) || 1;
+				const o = new Option(`${n || 'Segment ' + id} (${sw}x${sh})`, id);
+				o.dataset.w = sw;
+				o.dataset.h = sh;
+				sel.add(o);
+			});
+		}
+		if(!sel.options.length) sel.add(new Option('Segment 0 (16x16)', 0));
+		const o = sel.options[sel.selectedIndex];
+		if(o){ mw = +o.dataset.w; mh = +o.dataset.h; }
+	}catch(e){ console.error(e); }
+}
+
+gId('seg').onchange = e => {
+	const o = e.target.selectedOptions[0];
+	mw = +o.dataset.w; mh = +o.dataset.h;
+	if(vInp) initCrop();
+};
+
+// --- Gamma persistence ---
+function loadGamma(newgamma){
+	if(newgamma){
+		localStorage.setItem('gamma', newgamma);
+		gId('gmVal').textContent = newgamma;
+		return;
+	}
+	const g = localStorage.getItem('gamma') || 2.2;
+	gId('gm').value = g;
+	gId('gmVal').textContent = g;
+}
+
+gId('gm').oninput = e => loadGamma(e.target.value);
+gId('cdepth').oninput = e => gId('colLbl').textContent = 1 << e.target.value;
+
+// --- File and URL loading ---
+gId('dropz').onclick = ()=>{ gId('file').value=''; gId('file').click(); };
+gId('dropz').ondragover = e=>{ e.preventDefault(); gId('dropz').classList.add('active'); };
+gId('dropz').ondragleave = ()=>gId('dropz').classList.remove('active');
+gId('dropz').ondrop = e=>{
+	e.preventDefault(); gId('dropz').classList.remove('active');
+	gId('file').files = e.dataTransfer.files;
+	handleFile();
+};
+gId('file').onchange = handleFile;
+
+function handleFile(){
+	const f = gId('file').files[0];
+	if(!f) return;
+	if(!f.type.startsWith('video/')){ msg('Only video files supported','error'); return; }
+	stopVid();
+	const url = URL.createObjectURL(f);
+	vid.src = url; vid.load();
+	vid.addEventListener('loadedmetadata', ()=>startCap(f.name,false), {once:true});
+	vid.play().catch(e=>{
+		msg('Failed to load: '+e.message,'error');
+		URL.revokeObjectURL(url);
+	});
+}
+
+gId('loadU').onclick = ()=>{
+	const url = gId('url').value.trim();
+	if(!url){ msg('Enter a URL','error'); return; }
+	loadUrl(url).catch(e=>msg('Failed to load: '+e.message,'error'));
+};
+
+function loadUrl(url){
+	return new Promise((res,rej)=>{
+		try{
+			stopVid();
+			vid.src = url; vid.load();
+			const onM = ()=>{
+				startCap(url.split('/').pop(), true);
+				res();
+			};
+			vid.addEventListener('loadedmetadata', onM, {once:true});
+			vid.play().catch(err=>{
+				vid.removeEventListener('loadedmetadata', onM);
+				rej(err);
+			});
+		}catch(e){ rej(e); }
+	});
+}
+
+// --- Stop video ---
+function stopVid(){
+	if(capTmr){ clearInterval(capTmr); capTmr = null; }
+	if(vid.src){
+		const old = vid.src;
+		vid.pause(); vid.src = ''; vid.load();
+		if(old.startsWith('blob:')) URL.revokeObjectURL(old);
+	}
+	gId('saveP').style.display = 'none';
+	gId('expGif').style.display = 'none';
+}
+
+// --- Start capture ---
+function startCap(){
+	gId('editor').classList.add('active');
+
+	const asp = vid.videoHeight / vid.videoWidth;
+	const pw = 800, ph = 600;
+	if(vid.videoWidth / vid.videoHeight > pw / ph){
+		cvs.height = ph; cvs.width = Math.round(ph / asp);
+	} else {
+		cvs.width = Math.min(pw, vid.videoWidth);
+		cvs.height = Math.round(cvs.width * asp);
+	}
+
+	const sc = Math.min(cvs.width / vid.videoWidth, cvs.height / vid.videoHeight);
+	vRect.w = vid.videoWidth * sc;
+	vRect.h = vid.videoHeight * sc;
+	vRect.x = (cvs.width - vRect.w) / 2;
+	vRect.y = (cvs.height - vRect.h) / 2;
+
+	vInp = vid;
+	initCrop();
+	updPrev();
+
+	if(!capTmr){
+		capTmr = setInterval(()=>{
+			if(keepSend) capFrame();
+			updPrev();
+		}, CAP_INT);
+	}
+
+	gId('vctrl').style.display = 'flex';
+	gId('saveP').style.display = 'inline-block';
+	gId('expGif').style.display = 'inline-block';
+
+	if(vid.duration && !isNaN(vid.duration)){
+		lEnd = vid.duration;
+		clampLoop();
+		updMarks();
+	}
+}
+
+// --- Play/Pause/Mute/Progress controls ---
+vid.addEventListener('play', () => { if (playBtn) playBtn.textContent = '⏸'; });
+vid.addEventListener('pause', () => { if (playBtn) playBtn.textContent = '▶'; });
+
+if (playBtn) playBtn.onclick = () => {
+	if (vid.paused) {
+		vid.play().then(() => { playBtn.textContent = '⏸'; keepSend = true; }).catch(()=>{});
+	} else {
+		vid.pause(); playBtn.textContent = '▶'; keepSend = true;
+	}
+};
+
+if (muteBtn) muteBtn.onclick = () => {
+	vid.muted = !vid.muted;
+	muteBtn.textContent = vid.muted ? '🔇' : '🔊';
+};
+
+if (prog) {
+	prog.addEventListener('input', (e) => { e.preventDefault(); prog.dragging = true; }, {passive:false});
+	prog.addEventListener('change', () => {
+		if (vid.duration && !isNaN(vid.duration)) vid.currentTime = (prog.value / 100) * vid.duration;
+		prog.dragging = false;
+	});
+}
+
+vid.addEventListener('loadedmetadata', () => {
+	updTime(); lEnd = vid.duration; clampLoop(); updMarks();
+});
+
+vid.addEventListener('timeupdate', () => {
+	if (!prog.dragging && vid.duration && !isNaN(vid.duration)) {
+		prog.value = (vid.currentTime / vid.duration) * 100;
+	}
+	updTime();
+});
+
+function updTime(){
+	const fmt = t => {
+		if (!t || isNaN(t)) return '0:00';
+		const m = Math.floor(t / 60);
+		const s = Math.floor(t % 60).toString().padStart(2, '0');
+		return `${m}:${s}`;
+	};
+	if (tDisp) tDisp.textContent = `${fmt(vid.currentTime)} / ${fmt(vid.duration)}`;
+}
+
+if (spdSl) spdSl.oninput = e => {
+	const v = parseFloat(e.target.value);
+	vid.playbackRate = v;
+	gId('spLbl').textContent = v.toFixed(1) + 'x';
+};
+
+gId('stop').onclick = ()=>{
+	stopVid(); vInp = null;
+	gId('editor').classList.remove('active');
+	msg('Stopped');
+};
+
+// --- Frame capture + send ---
+function capFrame(){
+	if(!vid.videoWidth) return;
+	try{
+		const cx = (crop.x - vRect.x) / vRect.w * vid.videoWidth;
+		const cy = (crop.y - vRect.y) / vRect.h * vid.videoHeight;
+		const cw = crop.w / vRect.w * vid.videoWidth;
+		const ch = crop.h / vRect.h * vid.videoHeight;
+
+		const tmp = document.createElement('canvas');
+		tmp.width = mw; tmp.height = mh;
+		const tc = tmp.getContext('2d');
+		tc.imageSmoothingEnabled = false;
+		tc.fillStyle = gId('bg').value;
+		tc.fillRect(0, 0, mw, mh);
+		tc.drawImage(vid, cx, cy, cw, ch, 0, 0, mw, mh);
+
+		const id = tc.getImageData(0, 0, mw, mh);
+		applyFilt(id, true);
+		tc.putImageData(id, 0, 0);
+
+		pvx.imageSmoothingEnabled=false;
+		pvx.drawImage(tmp, 0, 0, mw, mh, 0, 0, pv.width, pv.height);
+
+		const rgb = new Uint8Array(mw * mh * 3);
+		for(let i = 0; i < mw * mh; i++){
+			rgb[i * 3] = id.data[i * 4];
+			rgb[i * 3 + 1] = id.data[i * 4 + 1];
+			rgb[i * 3 + 2] = id.data[i * 4 + 2];
+		}
+		if(ws && ws.readyState === 1) sendDDP(ws, 0, mw * mh, rgb);
+	} catch(e){ console.error(e); }
+}
+
+// --- Filtering ---
+function applyFilt(id, useGamma){
+	const thr = +gId('bt').value;
+	const bgc = gId('bg').value.match(/\w\w/g).map(x => parseInt(x, 16));
+	const bri = +gId('br').value / 255;
+	const gam = +gId('gm').value;
+
+	for(let i = 0; i < id.data.length; i += 4){
+		id.data[i] *= bri;
+		id.data[i + 1] *= bri;
+		id.data[i + 2] *= bri;
+
+		if(id.data[i] < thr && id.data[i + 1] < thr && id.data[i + 2] < thr){
+			id.data[i] = bgc[0]; id.data[i + 1] = bgc[1]; id.data[i + 2] = bgc[2];
+		}
+
+		if(useGamma){
+			id.data[i] = Math.min(255, Math.round(Math.pow(id.data[i] / 255, gam) * 255));
+			id.data[i + 1] = Math.min(255, Math.round(Math.pow(id.data[i + 1] / 255, gam) * 255));
+			id.data[i + 2] = Math.min(255, Math.round(Math.pow(id.data[i + 2] / 255, gam) * 255));
+		}
+	}
+}
+
+// --- Crop and Preview ---
+function updPrev(){
+	ctx.fillStyle = gId('bg').value;
+	ctx.fillRect(0, 0, cvs.width, cvs.height);
+	ctx.drawImage(vid, vRect.x, vRect.y, vRect.w, vRect.h);
+	drawCrop();
+}
+
+function drawCrop(){
+	ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
+	ctx.shadowColor = "#000"; ctx.shadowBlur = 2;
+	ctx.strokeStyle = "#FFF";
+	ctx.beginPath(); ctx.roundRect(crop.x, crop.y, crop.w, crop.h, 6);
+	ctx.stroke(); ctx.shadowColor = "#000F";
+}
+
+function initCrop(){
+	const asp = mw / mh;
+	const vw = vRect.w, vh = vRect.h;
+	if(vw / vh > asp){
+		crop.h = vh * 0.8; crop.w = crop.h * asp;
+	} else {
+		crop.w = vw * 0.8; crop.h = crop.w / asp;
+	}
+	crop.x = vRect.x + (vw - crop.w) / 2;
+	crop.y = vRect.y + (vh - crop.h) / 2;
+	updPrev();
+
+	const ratio = mh/mw;
+	if(ratio > 1){
+		pv.height = 256;
+		pv.width = Math.max(8, Math.round(256 / ratio));
+	} else {
+		pv.width = 256;
+		pv.height = Math.max(8, Math.round(256 * ratio));
+	}
+}
+
+function clampCrop(){
+	crop.w = Math.max(30, Math.min(crop.w, vRect.w));
+	crop.h = Math.max(30, Math.min(crop.h, vRect.h));
+	crop.x = Math.max(vRect.x, Math.min(crop.x, vRect.x + vRect.w - crop.w));
+	crop.y = Math.max(vRect.y, Math.min(crop.y, vRect.y + vRect.h - crop.h));
+}
+
+// controls
+gId('bg').oninput = ()=>{ if(vInp && !capTmr) updPrev(); };
+gId('bt').oninput = ()=>{ gId('btVal').textContent = gId('bt').value; };
+gId('br').oninput = ()=>{ gId('brVal').textContent = gId('br').value; };
+
+gId('mAsp').onclick = e=>{
+	e.preventDefault();
+	const r = mw / mh; crop.h = crop.w / r; clampCrop(); updPrev();
+};
+
+gId('mSize').onclick = e=>{
+	e.preventDefault(); if(!vInp) return;
+	const sc = vRect.w / vid.videoWidth;
+	crop.w = mw * sc; crop.h = mh * sc; clampCrop(); updPrev();
+};
+
+gId('fSize').onclick = e=>{
+	e.preventDefault(); if(!vInp) return;
+	crop.x = vRect.x; crop.y = vRect.y; crop.w = vRect.w; crop.h = vRect.h; clampCrop(); updPrev();
+};
+
+gId('rCrop').onclick = e=>{ e.preventDefault(); if(!vInp) return; initCrop(); };
+
+function getHandles(r){
+	const sz = 40, of = sz / 2;
+	const ox = r.x - of, oy = r.y - of, ow = r.w + sz, oh = r.h + sz;
+	return {
+		nw: {x: ox, y: oy, w: sz, h: sz}, ne: {x: ox + ow - sz, y: oy, w: sz, h: sz},
+		sw: {x: ox, y: oy + oh - sz, w: sz, h: sz}, se: {x: ox + ow - sz, y: oy + oh - sz, w: sz, h: sz},
+		n: {x: ox + sz / 2, y: oy, w: ow - sz, h: sz}, s: {x: ox + sz / 2, y: oy + oh - sz, w: ow - sz, h: sz},
+		w: {x: ox, y: oy + sz / 2, w: sz, h: oh - sz}, e: {x: ox + ow - sz, y: oy + sz / 2, w: sz, h: oh - sz}
+	};
+}
+
+function hitTest(mx, my){
+	const h = getHandles(crop);
+	for(const k in h){
+		const r = h[k];
+		if(mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return k;
+	}
+	return null;
+}
+
+function getPos(e){
+	const r = cvs.getBoundingClientRect();
+	const sx = cvs.width / r.width, sy = cvs.height / r.height;
+	let cx, cy;
+	if(e.touches && e.touches.length){ cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+	else if (e.changedTouches && e.changedTouches.length) { cx = e.changedTouches[0].clientX; cy = e.changedTouches[0].clientY; }
+	else { cx = e.clientX; cy = e.clientY; }
+	return {x: (cx - r.left) * sx, y: (cy - r.top) * sy};
+}
+
+function startDrag(mx, my){
+	hand = hitTest(mx, my);
+	if(hand){ drag = true; return; }
+	if(mx > crop.x && mx < crop.x + crop.w && my > crop.y && my < crop.y + crop.h){
+		drag = true; hand = "move"; offX = mx - crop.x; offY = my - crop.y;
+	}
+}
+
+function moveDrag(mx, my){
+	if(!drag) return;
+	switch(hand){
+		case "move": crop.x = mx - offX; crop.y = my - offY; break;
+		case "nw": crop.w += (crop.x - mx); crop.h += (crop.y - my); crop.x = mx; crop.y = my; break;
+		case "ne": crop.w = mx - crop.x; crop.h += (crop.y - my); crop.y = my; break;
+		case "sw": crop.w += (crop.x - mx); crop.x = mx; crop.h = my - crop.y; break;
+		case "se": crop.w = mx - crop.x; crop.h = my - crop.y; break;
+		case "n": crop.h += (crop.y - my); crop.y = my; break;
+		case "s": crop.h = my - crop.y; break;
+		case "w": crop.w += (crop.x - mx); crop.x = mx; break;
+		case "e": crop.w = mx - crop.x; break;
+	}
+	clampCrop(); updPrev();
+}
+
+function endDrag(){ drag = false; hand = null; }
+
+// Mouse / touch events for canvas
+cvs.addEventListener('mousedown', e=>{ if(!vInp) return; const {x, y} = getPos(e); e.preventDefault(); startDrag(x, y); }, {passive:false});
+cvs.addEventListener('mousemove', e=>{ if(!vInp) return; const {x, y} = getPos(e); e.preventDefault(); moveDrag(x, y); }, {passive:false});
+cvs.addEventListener('mouseup', e=>{ e.preventDefault(); endDrag(); }, {passive:false});
+cvs.addEventListener('touchstart', e=>{ if(!vInp) return; e.preventDefault(); const {x, y} = getPos(e); startDrag(x, y); }, {passive:false});
+cvs.addEventListener('touchmove', e=>{ if(!vInp) return; e.preventDefault(); const {x, y} = getPos(e); moveDrag(x, y); }, {passive:false});
+cvs.addEventListener('touchend', e=>{ e.preventDefault(); endDrag(); }, {passive:false});
+cvs.addEventListener('touchcancel', e=>{ e.preventDefault(); endDrag(); }, {passive:false});
+
+// --- Presets (save/load) ---
+function getPresets(){
+	try{ return JSON.parse(localStorage.getItem('wled_video_presets') || '[]'); }
+	catch(e){ return []; }
+}
+function savePresets(lst){ localStorage.setItem('wled_video_presets', JSON.stringify(lst)); }
+
+function loadPresets(){
+	const ps = getPresets();
+	const lst = gId('plist'), cont = gId('prests');
+	if(!ps.length){ cont.style.display = 'none'; return; }
+	cont.style.display = 'block'; lst.innerHTML = '';
+
+	ps.forEach((p, i)=>{
+		const div = document.createElement('div'); div.className = 'prow';
+		const btn = document.createElement('button'); btn.className = 'sml'; btn.style.flex='1';
+		btn.textContent = p.name; btn.title = p.url || '(local preset)';
+		btn.onclick = async()=>{
+			try{
+				if (p.url) { gId('url').value = p.url; await loadUrl(p.url); applyPreset(p); }
+				else { applyPreset(); }
+			}catch(e){ msg('Preset error', 'error'); }
+		};
+		const upd = document.createElement('button'); upd.className = 'sml'; upd.textContent = '⟳';
+		upd.onclick = ()=>{
+			if(confirm(`Update "${p.name}"?`)){
+				const a = getPresets();
+				const old = a[i].name;
+				a.splice(i, 1);
+				addPreset(a);
+				a[a.length - 1].name = old;
+				savePresets(a);
+				loadPresets();
+				msg('Preset updated');
+			}
+		};
+		const del = document.createElement('button'); del.className = 'sml'; del.textContent = '✕';
+		del.onclick = ()=>{
+			if(confirm(`Delete "${p.name}"?`)){
+				const a = getPresets(); a.splice(i, 1); savePresets(a); loadPresets(); msg('Preset deleted');
+			}
+		};
+		div.append(btn, upd, del);
+		lst.appendChild(div);
+	});
+}
+
+function applyPreset(p){
+	if (p.url) {
+		gId('url').value = p.url;
+	}
+
+	if(p.crop) { crop = {...p.crop}; clampCrop(); }
+
+	gId('bt').value = p.bt ?? gId('bt').value; gId('btVal').textContent = gId('bt').value;
+	gId('br').value = p.br ?? gId('br').value; gId('brVal').textContent = gId('br').value;
+	gId('gm').value = p.gm ?? gId('gm').value; gId('gmVal').textContent = gId('gm').value;
+	gId('bg').value = p.bg ?? gId('bg').value;
+
+	if (typeof p.mute !== 'undefined') vid.muted = !!p.mute;
+	if (typeof p.speed !== 'undefined') {
+		vid.playbackRate = p.speed; gId('speed').value = p.speed;
+		gId('spLbl').textContent = p.speed.toFixed(1) + 'x';
+	}
+
+	if (typeof p.lStart === 'number') lStart = Number(p.lStart);
+	if (typeof p.lEnd === 'number') lEnd = Number(p.lEnd);
+	if (!lEnd && vid.duration && !isNaN(vid.duration)) lEnd = vid.duration;
+
+	clampLoop(); updMarks();
+
+	if (typeof p.curTime === 'number' && !isNaN(p.curTime)) {
+		try { vid.currentTime = p.curTime; } catch (e) {}
+	}
+
+	if (p.paused) vid.pause(); else vid.play().catch(()=>{});
+
+	updPrev();
+	gId('saveP').style.display = 'inline-block';
+	gId('expGif').style.display = 'inline-block';
+}
+
+function addPreset(plist) {
+	const url = gId('url').value.trim();
+	const p = {
+		name: gId('pname')?.value || '',
+		...(url && !url.startsWith('blob:') ? {url} : {}),
+		crop: {...crop},
+		mute: vid.muted,
+		speed: vid.playbackRate,
+		curTime: vid.paused ? vid.currentTime : undefined,
+		paused: vid.paused,
+		lStart,
+		lEnd,
+		bt: gId('bt').value,
+		br: gId('br').value,
+		gm: gId('gm').value,
+		bg: gId('bg').value
+	};
+	plist.push(p);
+}
+
+gId('saveP').onclick = () => {
+	const url = gId('url').value.trim();
+	const base = url ? url.split('/').pop().split('?')[0].replace(/\.[^/.]+$/, '') : 'local-video';
+	const def = base.substring(0, 32) || 'video';
+	gId('pname').value = def;
+	gId('saveDlg').classList.add('active');
+};
+
+gId('saveOk').onclick = ()=>{
+	const a = getPresets();
+	addPreset(a);
+	savePresets(a);
+	loadPresets();
+	msg('Preset saved'); gId('saveDlg').classList.remove('active');
+};
+
+gId('saveCn').onclick = ()=> gId('saveDlg').classList.remove('active');
+
+// --- Loop marker / marker drag handling ---
+function clampLoop(){
+	if (!vid.duration || isNaN(vid.duration)) return;
+	if (typeof lStart !== 'number' || lStart < 0) lStart = 0;
+	if (!lEnd || lEnd > vid.duration) lEnd = vid.duration;
+	if (lStart >= lEnd) lStart = Math.max(0, lEnd - 0.1);
+}
+
+function updMarks(){
+	clampLoop();
+	if (!vid.duration || isNaN(vid.duration)) {
+		lSt.style.display = 'none'; lEd.style.display = 'none'; lRegn.style.display = 'none';
+		return;
+	}
+	lSt.style.display = ''; lEd.style.display = ''; lRegn.style.display = '';
+
+	const pS = (lStart / vid.duration) * 100;
+	const pE = (lEnd / vid.duration) * 100;
+
+	setMarkPos(lSt, pS); setMarkPos(lEd, pE); setRegnPos(pS, pE);
+}
+
+function setMarkPos(el, pct){ el.style.left = pct + '%'; }
+function setRegnPos(pS, pE){
+	lRegn.style.left = pS + '%';
+	lRegn.style.width = (pE - pS) + '%';
+}
+
+function cxToPct(cx){
+	const r = pWrap.getBoundingClientRect();
+	let x = cx - r.left;
+	x = Math.max(0, Math.min(r.width, x));
+	return (x / r.width) * 100;
+}
+
+function onMarkDown(ev, which){
+	ev.preventDefault(); ev.stopPropagation();
+	mDrag = which;
+	if (ev.pointerId) ev.target.setPointerCapture(ev.pointerId);
+}
+
+function onDocMove(ev){
+	if (!mDrag) return;
+	ev.preventDefault();
+	const pct = cxToPct(ev.clientX);
+	if (!vid.duration || isNaN(vid.duration)) return;
+	const sec = (pct / 100) * vid.duration;
+	if (mDrag === 'start') lStart = Math.min(sec, (lEnd || vid.duration) - 0.01);
+	else lEnd = Math.max(sec, (lStart || 0) + 0.01);
+	clampLoop(); updMarks();
+}
+
+function onDocUp(ev){
+	if (!mDrag) return;
+	try {
+		if (ev.pointerId) {
+			const el = mDrag === 'start' ? lSt : lEd;
+			el.releasePointerCapture(ev.pointerId);
+		}
+	} catch(e){}
+	mDrag = null; clampLoop(); updMarks();
+
+	if (!vid.paused && (vid.currentTime < lStart || vid.currentTime > lEnd)) {
+		try { vid.currentTime = lStart; } catch(e){}
+	}
+}
+
+lSt.addEventListener('pointerdown', e => onMarkDown(e, 'start'));
+lEd.addEventListener('pointerdown', e => onMarkDown(e, 'end'));
+document.addEventListener('pointermove', onDocMove, {passive:false});
+document.addEventListener('pointerup', onDocUp, {passive:false});
+document.addEventListener('pointercancel', onDocUp, {passive:false});
+
+prog.addEventListener('pointerdown', (e) => {
+	if (mDrag || !vid.duration || isNaN(vid.duration)) return;
+	const pct = cxToPct(e.clientX);
+	const t = (pct / 100) * vid.duration;
+	vid.currentTime = t; prog.value = pct;
+});
+
+// --- Loop enforcement ---
+let loopInt = null;
+
+function enforceLoop() {
+	if (!vid.duration) return;
+	const margin = 0.033 * vid.playbackRate;
+	if (vid.currentTime >= lEnd - margin || vid.currentTime < lStart) {
+		keepSend = false;
+		vid.currentTime = lStart + 0.0001;
+	}
+}
+
+vid.addEventListener('play', () => {
+	if (loopInt) clearInterval(loopInt);
+	loopInt = setInterval(enforceLoop, 16);
+});
+vid.addEventListener('pause', () => {
+	if (loopInt) { clearInterval(loopInt); loopInt = null; }
+});
+vid.addEventListener('timeupdate', enforceLoop);
+vid.addEventListener('seeked',()=>keepSend=true);
+
+// --- GIF generation helpers ---
+function genPal(pix, maxCols){
+	const map=new Map();
+	for(let i=0;i<pix.length;i+=4){
+		const c=(pix[i]<<16)|(pix[i+1]<<8)|pix[i+2];
+		map.set(c,(map.get(c)||0)+1);
+	}
+	let bkts=[Array.from(map,([rgb,cnt])=>({r:rgb>>16&255,g:rgb>>8&255,b:rgb&255,cnt}))];
+	while(bkts.length<maxCols&&bkts.some(b=>b.length>1)){
+		bkts.sort((a,b)=>b.length-a.length);
+		const bk=bkts.shift();
+
+		let maxCh='r', maxRng=0;
+		for(const ch of ['r','g','b']){
+			let min=255, max=0;
+			for(const c of bk){ if(c[ch]<min)min=c[ch]; if(c[ch]>max)max=c[ch]; }
+			const rng=max-min;
+			if(rng>maxRng){ maxRng=rng; maxCh=ch; }
+		}
+
+		bk.sort((a,c)=>a[maxCh]-c[maxCh]);
+		const md=bk.length>>1;
+		bkts.push(bk.slice(0,md),bk.slice(md));
+	}
+	const pal=bkts.map(b=>{
+		const t=b.reduce((s,c)=>s+c.cnt,0);
+		const r=Math.round(b.reduce((s,c)=>s+c.r*c.cnt,0)/t);
+		const g=Math.round(b.reduce((s,c)=>s+c.g*c.cnt,0)/t);
+		const bl=Math.round(b.reduce((s,c)=>s+c.b*c.cnt,0)/t);
+		return(r<<16)|(g<<8)|bl;
+	});
+	let p2=1;
+	while(p2<pal.length)p2<<=1;
+	for(let i=pal.length;i<p2;i++)pal[i]=pal[pal.length-1];
+
+	const idx=new Uint8Array(pix.length/4);
+	for(let i=0,j=0;i<pix.length;i+=4,j++){
+		let r=pix[i],g=pix[i+1],b=pix[i+2],best=0,minD=1e9;
+		for(let k=0;k<pal.length;k++){
+			const p=pal[k],pr=p>>16&255,pg=p>>8&255,pb=p&255;
+			const d=(r-pr)**2+(g-pg)**2+(b-pb)**2;
+			if(d<minD){minD=d;best=k;}
+		}
+		idx[j]=best;
+	}
+	return{indexed:idx,palette:pal};
+}
+
+function grid(length) {
+	if (length <= 320) return { w: length, h: 1 };
+	let best = [1, length], waste = length;
+	for (let w = 320; w >= 2; w--) {
+		const h = Math.ceil(length / w);
+		const wst = w * h - length;
+		if (wst < waste) {
+			best = [w, h];
+			waste = wst;
+			if (!waste) break;
+		}
+	}
+	return { w: best[0], h: best[1] };
+}
+
+// --- GIF export UI + logic ---
+let gifBlob, gifName;
+
+gId('expGif').onclick = () => {
+	if(!vInp){ msg('No video loaded', 'error'); return; }
+	if(!vid.duration || isNaN(vid.duration)){ msg('Video metadata not ready', 'error'); return; }
+
+	const wasPlay = !vid.paused;
+	if (wasPlay) vid.pause();
+
+	gId('gname').value = 'myvideo';
+	gId('gfps').value = 20;
+	gId('cdepth').value = 8; gId('colLbl').textContent = '256';
+	gId('expDlg').classList.add('active');
+
+	const expOk = gId('expOk'), expCn = gId('expCn');
+
+	expOk.onclick = async () => {
+		gId('expDlg').classList.remove('active');
+		ovShow();
+		try {
+			const r = await expGif(gId('gname').value.trim() || 'mygif', +gId('gfps').value, 1 << +gId('cdepth').value);
+			ovHide();
+			gifBlob = r.blob; gifName = r.name;
+			gId('gifInf').textContent = `${(r.blob.size/1024).toFixed(1)} KB | ${r.frames} frames | ${r.duration.toFixed(2)}s`;
+			const prvImg = gId('gifPrv');
+			const url = URL.createObjectURL(gifBlob);
+			const tmp = new Image();
+			tmp.src = url;
+			tmp.onload = () => {
+				const maxW = window.innerWidth * 0.9;
+				const maxH = window.innerHeight * 0.6;
+				const scale = Math.min(maxW / tmp.width, maxH / tmp.height, 8);
+				prvImg.style.width  = (tmp.width * scale) + "px";
+				prvImg.style.height = (tmp.height * scale) + "px";
+				prvImg.src = url;
+				prvImg.style.display = "block";
+			};
+			prvImg.onload = () => URL.revokeObjectURL(prvImg.src);
+			gId('resDlg').classList.add('active');
+		} catch(e) {
+			ovHide(); msg('Export failed: ' + e.message, 'error');
+			if (wasPlay) vid.play().catch(()=>{});
+		}
+	};
+
+	expCn.onclick = () => {
+		gId('expDlg').classList.remove('active');
+		if (wasPlay) vid.play().catch(()=>{});
+	};
+};
+
+gId('gifDl').onclick = () => {
+	const url = URL.createObjectURL(gifBlob);
+	const a = document.createElement('a');
+	a.href = url; a.download = gifName + '.gif'; a.click();
+	URL.revokeObjectURL(url);
+	gId('gifPrv').style.display = 'none';
+	gId('resDlg').classList.remove('active');
+};
+
+gId('gifUp').onclick = async () => {
+	try {
+		const fd = new FormData();
+		fd.append('file', gifBlob, gifName + '.gif');
+		const r = await fetch(`${wu}/upload`, { method: 'POST', body: fd });
+		if (r.ok) {
+			gId('gifPrv').style.display = 'none';
+			msg('Uploaded');
+			gId('resDlg').classList.remove('active');
+		} else msg('Upload failed', 'error');
+	} catch(e) { msg('Upload failed', 'error'); }
+};
+
+gId('gifCn').onclick = () => {
+	gId('gifPrv').style.display = 'none';
+	gId('resDlg').classList.remove('active');
+};
+
+async function expGif(nm, fps, maxCols) {
+	const spd = vid.playbackRate || 1;
+	const useLoop = (typeof lStart === 'number' && lEnd && lEnd > lStart + 0.001);
+	const tStart = useLoop ? lStart : 0;
+	const tEnd = useLoop ? lEnd : vid.duration;
+	const tStep = spd / fps;
+
+	const tc = document.createElement('canvas');
+	tc.width = mw; tc.height = mh;
+	const tctx = tc.getContext('2d', { willReadFrequently: true });
+	tctx.imageSmoothingEnabled = false;
+
+	const savT = vid.currentTime;
+	const wasPause = vid.paused;
+
+	const frames = [];
+	const dlys = [];
+	let lastF = null;
+	let accD = 0;
+
+	async function capAt(t) {
+		vid.currentTime = t;
+		await new Promise((res) => {
+			const onSeek = () => { vid.removeEventListener('seeked', onSeek); res(); };
+			vid.addEventListener('seeked', onSeek);
+		});
+		const cx = (crop.x - vRect.x) / vRect.w * vid.videoWidth;
+		const cy = (crop.y - vRect.y) / vRect.h * vid.videoHeight;
+		const cw = crop.w / vRect.w * vid.videoWidth;
+		const ch = crop.h / vRect.h * vid.videoHeight;
+
+		tctx.fillStyle = gId('bg').value;
+		tctx.fillRect(0, 0, mw, mh);
+		tctx.drawImage(vid, cx, cy, cw, ch, 0, 0, mw, mh);
+		const fd = tctx.getImageData(0, 0, mw, mh);
+		applyFilt(fd, false);
+		return fd.data;
+	}
+
+	for (let t = tStart; t < tEnd;) {
+		const frm = await capAt(t);
+
+		if (lastF && frm.every((v, i) => v === lastF[i])) {
+			accD += 0.01; t += 0.01;
+			continue;
+		} else { t += tStep; }
+
+		frames.push(frm);
+		if (lastF) dlys.push(Math.max(1, Math.round(accD * 100 / spd)));
+		lastF = frm;
+		accD = tStep;
+	}
+
+	if (frames.length) dlys.push(Math.max(1, Math.round(accD * 100 / spd)));
+	const g = grid(mw); // mw is the length in 1D, map it into a 2D grid with minimal wasted pixels limted to 320x320
+	const gw = g.w, gh = Math.max(g.h, mh);
+
+	const all = new Uint8Array(frames.length * gw * gh * 4);
+	frames.forEach((f, i) => {
+		const off = i * gw * gh * 4;
+		for (let j = 0; j < gw * gh; j++) {
+			const src = (j < mw*mh ? j : mw*mh-1) * 4;
+			all[off + j*4] = f[src];
+			all[off + j*4 + 1] = f[src + 1];
+			all[off + j*4 + 2] = f[src + 2];
+			all[off + j*4 + 3] = 255;
+		}
+	});
+
+	const { indexed, palette } = genPal(all, maxCols);
+
+	const gd = [];
+	const wr = new GifWriter(gd, gw, gh, { palette, loop: 0 });
+	const ppf = gw * gh;
+
+	wr.addFrame(0, 0, gw, gh, indexed.subarray(0, ppf), { delay: dlys[0], disposal: 1 });
+
+	for (let i = 1; i < frames.length; i++) {
+		const curr = indexed.subarray(i * ppf, (i + 1) * ppf);
+		const prev = indexed.subarray((i - 1) * ppf, i * ppf);
+
+		let minX = gw, minY = gh, maxX = 0, maxY = 0;
+		for (let y = 0; y < gh; y++) {
+			for (let x = 0; x < gw; x++) {
+				const idx = y * gw + x;
+				if (curr[idx] !== prev[idx]) {
+					if (x < minX) minX = x;
+					if (x > maxX) maxX = x;
+					if (y < minY) minY = y;
+					if (y > maxY) maxY = y;
+				}
+			}
+		}
+
+		if (minX > maxX) {
+			wr.addFrame(0, 0, 1, 1, new Uint8Array([0]), { delay: dlys[i], disposal: 1, transparent: 0 });
+		} else {
+			const w = maxX - minX + 1, h = maxY - minY + 1;
+			const region = new Uint8Array(w * h);
+			for (let y = 0; y < h; y++) {
+				for (let x = 0; x < w; x++) {
+					region[y * w + x] = curr[(minY + y) * gw + (minX + x)];
+				}
+			}
+			wr.addFrame(minX, minY, gw, gh, region, { delay: dlys[i], disposal: 1 });
+		}
+	}
+	wr.end();
+
+	const gifBlob = new Blob([new Uint8Array(gd)], { type: 'image/gif' });
+	const duration = dlys.reduce((sum, d) => sum + d, 0) / 100;
+
+	try { vid.currentTime = savT; } catch(e) {}
+	if (!wasPause) vid.play().catch(() => {});
+
+	return { blob: gifBlob, name: nm, frames: frames.length, duration };
+}
+</script>
+</body>
+</html>
