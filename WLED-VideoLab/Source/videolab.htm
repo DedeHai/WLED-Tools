@@ -42,7 +42,7 @@ body {
 	background-size: 100% 17px;
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
-	animation: rgbshift 4s linear infinite;
+	animation: rgbshift 4s linear 10;
 	font-size: 36px;
 }
 @keyframes rgbshift { to { background-position: 0 34px; } }
@@ -219,50 +219,74 @@ button.sml {
 	width: 100%;
 }
 .bcont { display: flex; gap: 10px; }
-.spacer { flex: 1; }
 .spcont {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 }
-
-.pwrap {
-	position: relative;
-	flex: 1;
-	height: 18px;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
+.pwrap{
+	position:relative;
+	flex:1 1 0;
+	min-width:0;
+	width:100%;
+	height:28px;
+	display:flex;
+	align-items:center;
+	overflow:visible;
 }
-.pbar {
-	-webkit-appearance: none;
-	appearance: none;
-	width: 100%;
-	height: 6px;
-	background: linear-gradient(90deg, #08d 0%, #08d 100%);
-	border-radius: 6px;
-	outline: none;
-	cursor: pointer;
-	position: relative;
-	z-index: 1;
+.pwrap .pbar{
+	-webkit-appearance:none;
+	appearance:none;
+	width:100%;
+	height:8px;
+	background:#444;
+	border-radius:6px;
+	margin:0;
+	outline:none;
 }
-.pbar::-webkit-slider-thumb {
-	-webkit-appearance: none;
-	width: 14px;
-	height: 14px;
-	background: #fff;
-	border-radius: 50%;
-	border: 2px solid #08d;
-	box-shadow: 0 0 6px rgba(0,0,0,0.6);
+.pwrap .pbar::-webkit-slider-thumb{
+	-webkit-appearance:none;
+	width:14px;
+	height:14px;
+	background:#fff;
+	border-radius:50%;
+	border:2px solid #08d;
 }
+.lregn{
+	position:absolute;
+	top:50%;
+	transform:translateY(-50%);
+	height:10px;
+	background:#08d;    /* blue between markers */
+	pointer-events:none;
+	z-index:0;
+}
+.lmark{
+	position:absolute;
+	top:50%;
+	transform:translate(-50%,-50%);
+	width:14px;
+	height:20px;
+	border-radius:2px;
+	z-index:2;
+	cursor:ew-resize;
+	touch-action:none;
+}
+.lmark::before{
+	position:absolute;
+	top:0;
+	width:3px;
+	height:100%;
+	background:#08d;
+}
+.lmark.start::before{ left:0; border-radius:2px 0 0 2px; border-left:2px solid #08d; }
+.lmark.end::before{ right:0; border-radius:0 2px 2 0; border-right:2px solid #08d; }
 .tdisp {
 	font-size: 14px;
 	color: #ccc;
 	min-width: 90px;
 	text-align: right;
 }
-
 /* loop region highlight */
 .lregn {
 	position: absolute;
@@ -369,8 +393,7 @@ input[type="color"] {
 <div class="cont">
 	<div class="title">WLED <span class="rb">VideoLab</span></div>
 
-	<h3 style="margin-top:20px;">Target Segment</h3>
-	<select id="seg"><option value="0" data-w="16" data-h="16">Segment 0 (16x16)</option></select>
+	<h3  id="mt" style="margin-top:20px;">Target Matrix: </h3>
 
 	<h3>Load Video</h3>
 
@@ -419,7 +442,6 @@ input[type="color"] {
 					<span id="tdisp" class="tdisp">0:00 / 0:00</span>
 				</div>
 				<div class="brow">
-					<div class="spacer"></div>
 					<div class="bcont">
 						<button id="play" class="sml" title="Play/Pause">⏸</button>
 						<button id="mute" class="sml" title="Mute/unmute">🔊</button>
@@ -429,7 +451,6 @@ input[type="color"] {
 						<input type="range" id="speed" min="0.1" max="4" step="0.1" value="1">
 						<span class="value" id="spLbl">1.0x</span>
 					</div>
-					<div class="spacer"></div>
 				</div>
 			</div>
 
@@ -551,7 +572,7 @@ let mDrag = null;
 	const params = new URLSearchParams(window.location.search);
 	wu = `http://${params.get('host')||window.location.host}`;
 	ws = connectWs(()=>console.log('WS connected'));
-	await loadSegs();
+	await loadSize();
 	loadGamma();
 	loadPresets();
 })();
@@ -579,33 +600,22 @@ function ovHide(){
 	ov.style.display = 'none';
 }
 
-// --- Segment loading ---
-async function loadSegs(){
-	const sel = gId('seg');
+// --- Load Matrix Dimensions, Segments are not supported in DDP streaming ---
+async function loadSize(){
+	const matrixsize = gId('mt'); // matrix size
 	try{
-		const r = await fetch(`${wu}/json/state`), j = await r.json();
-		sel.innerHTML = '';
-		if(j.seg && j.seg.length){
-			j.seg.forEach(({id, n, start, stop, startY, stopY})=>{
-				const sw = (stop - start) || 1;
-				const sh = (stopY - startY) || 1;
-				const o = new Option(`${n || 'Segment ' + id} (${sw}x${sh})`, id);
-				o.dataset.w = sw;
-				o.dataset.h = sh;
-				sel.add(o);
-			});
+		const r = await fetch(`${wu}/json/info`), j = await r.json();
+		if(j.leds.matrix && j.leds.matrix.w && j.leds.matrix.h){
+			const {w, h} = j.leds.matrix;
+			matrixsize.textContent = `Target Matrix: ${w}x${h}`;
+			mw = w; mh = h; // set global size
 		}
-		if(!sel.options.length) sel.add(new Option('Segment 0 (16x16)', 0));
-		const o = sel.options[sel.selectedIndex];
-		if(o){ mw = +o.dataset.w; mh = +o.dataset.h; }
+		else{
+			mw = j.leds.count; mh = 1; // 1D strip
+			matrixsize.textContent = `Target Strip: ${mw} LEDs`;
+		}
 	}catch(e){ console.error(e); }
 }
-
-gId('seg').onchange = e => {
-	const o = e.target.selectedOptions[0];
-	mw = +o.dataset.w; mh = +o.dataset.h;
-	if(vInp) initCrop();
-};
 
 // --- Gamma persistence ---
 function loadGamma(newgamma){
@@ -793,7 +803,7 @@ function capFrame(){
 
 		const tmp = document.createElement('canvas');
 		tmp.width = mw; tmp.height = mh;
-		const tc = tmp.getContext('2d');
+		const tc = tmp.getContext('2d', {willReadFrequently:true});
 		tc.imageSmoothingEnabled = false;
 		tc.fillStyle = gId('bg').value;
 		tc.fillRect(0, 0, mw, mh);
