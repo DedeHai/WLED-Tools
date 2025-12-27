@@ -94,7 +94,7 @@ body {
 }
 #canvas {
 	cursor: crosshair;
-	max-width: 100%;
+	max-width: 90%;
 	touch-action: none;
 }
 #pv {
@@ -252,35 +252,6 @@ button.sml {
 	border-radius:50%;
 	border:2px solid #08d;
 }
-.lregn{
-	position:absolute;
-	top:50%;
-	transform:translateY(-50%);
-	height:10px;
-	background:#08d;    /* blue between markers */
-	pointer-events:none;
-	z-index:0;
-}
-.lmark{
-	position:absolute;
-	top:50%;
-	transform:translate(-50%,-50%);
-	width:14px;
-	height:20px;
-	border-radius:2px;
-	z-index:2;
-	cursor:ew-resize;
-	touch-action:none;
-}
-.lmark::before{
-	position:absolute;
-	top:0;
-	width:3px;
-	height:100%;
-	background:#08d;
-}
-.lmark.start::before{ left:0; border-radius:2px 0 0 2px; border-left:2px solid #08d; }
-.lmark.end::before{ right:0; border-radius:0 2px 2 0; border-right:2px solid #08d; }
 .tdisp {
 	font-size: 14px;
 	color: #ccc;
@@ -389,7 +360,7 @@ input[type="color"] {
 </style>
 </head>
 <body>
-<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.9B</div>
+<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.91beta</div>
 <div class="cont">
 	<div class="title">WLED <span class="rb">VideoLab</span></div>
 
@@ -407,12 +378,9 @@ input[type="color"] {
 		<input type="text" id="url">
 		<button class="sml" id="loadU" title="Play URL">▶</button>
 	</div>
-  <div>
-    Examples:<br/>
-    https://cdn.pixabay.com/video/2025/04/13/271793_tiny.mp4<br/>
-    https://cdn.pixabay.com/video/2025/11/13/315721_tiny.mp4<br/>
-    https://cdn.pixabay.com/video/2023/01/08/145766-787427612_tiny.mp4
-  </div>
+  <h5>
+    Example: https://cdn.pixabay.com/video/2023/01/08/145766-787427612_tiny.mp4
+  </h5>
 	<div class="presets" id="prests" style="display:none;">
 		<h3>Saved Video Presets</h3>
 		<div id="plist"></div>
@@ -542,10 +510,15 @@ input[type="color"] {
 const cvs = gId('canvas'), ctx = cvs.getContext('2d', {willReadFrequently:true});
 const pv = gId('pv'), pvx = pv.getContext('2d', {willReadFrequently:true});
 const vid = gId('video');
+const capCvs = document.createElement('canvas'); // offscreen capture canvas at target resolution
+const capCtx  = capCvs.getContext('2d', {willReadFrequently:true});
+const dsCvs = document.createElement('canvas'); // offscreen downscale canvas for preview (much faster)
+const dsCtx = dsCvs.getContext('2d', {willReadFrequently:true});
+let rgbBuf = null, lut = new Uint8ClampedArray(256), thr = 0, bgc = [0,0,0], bri = 1; // buffers/variables for faster color processing
 
 let wu = '', ws = null, mw = 32, mh = 32;
 let crop = {x:50, y:50, w:200, h:150}, drag=false, hand=null, offX=0, offY=0;
-let vInp = null, capTmr = null;
+let vInp = null;
 let vRect = {x:0, y:0, w:0, h:0};
 let keepSend = true;
 
@@ -558,7 +531,10 @@ const prog = gId('prog');
 const tDisp = gId('tdisp');
 const spdSl = gId('speed');
 
+let sendBusy = false;
+let lastSend = 0;
 const CAP_INT = 33; // ~30 FPS capture used in live sending
+const QUEUE_MAX = 65536; // max number of bytes allowed in WS queue before skipping frames
 
 const pWrap = gId('pwrap');
 const lRegn = gId('lregn');
@@ -574,6 +550,7 @@ let mDrag = null;
 	ws = connectWs(()=>console.log('WS connected'));
 	await loadSize();
 	loadGamma();
+	buildLUT();
 	loadPresets();
 })();
 
@@ -614,7 +591,20 @@ async function loadSize(){
 			mw = j.leds.count; mh = 1; // 1D strip
 			matrixsize.textContent = `Target Strip: ${mw} LEDs`;
 		}
+		initCapBuffers();
 	}catch(e){ console.error(e); }
+}
+
+// --- processing canvas and LUT for gamma ---
+function initCapBuffers(){ capCvs.width = mw; capCvs.height = mh; rgbBuf = new Uint8Array(mw*mh*3); }
+function buildLUT(){
+	bri = +gId('br').value / 255;
+	thr = +gId('bt').value;
+	bgc = gId('bg').value.match(/\w\w/g).map(x=>parseInt(x,16));
+	const gam = +gId('gm').value;
+	for(let i=0;i<256;i++){
+		lut[i] = Math.min(255, Math.round(Math.pow((i * bri) / 255, gam) * 255));
+	}
 }
 
 // --- Gamma persistence ---
@@ -622,12 +612,18 @@ function loadGamma(newgamma){
 	if(newgamma){
 		localStorage.setItem('gamma', newgamma);
 		gId('gmVal').textContent = newgamma;
+		buildLUT();
 		return;
 	}
 	const g = localStorage.getItem('gamma') || 2.2;
 	gId('gm').value = g;
 	gId('gmVal').textContent = g;
 }
+
+// --- keep capturing and sending data when video paused ---
+setInterval(() => {
+  if (vid.paused && vInp && !capBusy) capFrame();
+}, 50);
 
 gId('gm').oninput = e => loadGamma(e.target.value);
 gId('cdepth').oninput = e => gId('colLbl').textContent = 1 << e.target.value;
@@ -683,16 +679,19 @@ function loadUrl(url){
 
 // --- Stop video ---
 function stopVid(){
-	if(capTmr){ clearInterval(capTmr); capTmr = null; }
-	if(vid.src){
-		const old = vid.src;
-		vid.pause(); vid.src = ''; vid.load();
-		if(old.startsWith('blob:')) URL.revokeObjectURL(old);
-	}
-	gId('saveP').style.display = 'none';
-	gId('expGif').style.display = 'none';
-}
+  if (vfcHandle){ try { vid.cancelVideoFrameCallback(vfcHandle); } catch(e){} vfcHandle = null; }
+  if (loopInt){ clearInterval(loopInt); loopInt = null; }
+  keepSend = false;
 
+  if (vid.src){
+    const old = vid.src;
+    vid.pause(); vid.src = ''; vid.load();
+    if (old.startsWith('blob:')) URL.revokeObjectURL(old);
+  }
+  gId('saveP').style.display = 'none';
+  gId('expGif').style.display = 'none';
+  gId('editor').classList.remove('active');
+}
 // --- Start capture ---
 function startCap(){
 	gId('editor').classList.add('active');
@@ -714,14 +713,9 @@ function startCap(){
 
 	vInp = vid;
 	initCrop();
-	updPrev();
 
-	if(!capTmr){
-		capTmr = setInterval(()=>{
-			if(keepSend) capFrame();
-			updPrev();
-		}, CAP_INT);
-	}
+	if (!vfcHandle) vfcHandle = vid.requestVideoFrameCallback(onVFrame);
+	capFrame();
 
 	gId('vctrl').style.display = 'flex';
 	gId('saveP').style.display = 'inline-block';
@@ -793,69 +787,105 @@ gId('stop').onclick = ()=>{
 };
 
 // --- Frame capture + send ---
-function capFrame(){
-	if(!vid.videoWidth) return;
-	try{
-		const cx = (crop.x - vRect.x) / vRect.w * vid.videoWidth;
-		const cy = (crop.y - vRect.y) / vRect.h * vid.videoHeight;
-		const cw = crop.w / vRect.w * vid.videoWidth;
-		const ch = crop.h / vRect.h * vid.videoHeight;
+let capBusy = false; // skip capture if still processing previous
+let vfcHandle = null;
+function onVFrame(){
+  if (!capBusy) capFrame();
+  vfcHandle = vid.requestVideoFrameCallback(onVFrame);
+}
 
-		const tmp = document.createElement('canvas');
-		tmp.width = mw; tmp.height = mh;
-		const tc = tmp.getContext('2d', {willReadFrequently:true});
-		tc.imageSmoothingEnabled = false;
-		tc.fillStyle = gId('bg').value;
-		tc.fillRect(0, 0, mw, mh);
-		tc.drawImage(vid, cx, cy, cw, ch, 0, 0, mw, mh);
+async function capFrame(){
+  if(capBusy || !vid.videoWidth) return;
+  capBusy = true;
+  try{
+    await updateDownscale(); // draw one downscaled frame to capture from
+		updPrev();
+    const cx = (crop.x - vRect.x) / vRect.w * dsCvs.width;
+    const cy = (crop.y - vRect.y) / vRect.h * dsCvs.height;
+    const cw = crop.w / vRect.w * dsCvs.width;
+    const ch = crop.h / vRect.h * dsCvs.height;
 
-		const id = tc.getImageData(0, 0, mw, mh);
-		applyFilt(id, true);
-		tc.putImageData(id, 0, 0);
+    capCtx.imageSmoothingEnabled = false;
+    capCtx.fillStyle = gId('bg').value;
+    capCtx.fillRect(0,0,mw,mh);
+    capCtx.drawImage(dsCvs, cx, cy, cw, ch, 0, 0, mw, mh);
 
-		pvx.imageSmoothingEnabled=false;
-		pvx.drawImage(tmp, 0, 0, mw, mh, 0, 0, pv.width, pv.height);
+    const id = capCtx.getImageData(0, 0, mw, mh);
+    applyFilt(id, true);
+    capCtx.putImageData(id, 0, 0);
 
-		const rgb = new Uint8Array(mw * mh * 3);
-		for(let i = 0; i < mw * mh; i++){
-			rgb[i * 3] = id.data[i * 4];
-			rgb[i * 3 + 1] = id.data[i * 4 + 1];
-			rgb[i * 3 + 2] = id.data[i * 4 + 2];
-		}
-		if(ws && ws.readyState === 1) sendDDP(ws, 0, mw * mh, rgb);
-	} catch(e){ console.error(e); }
+    for(let i=0,j=0;i<id.data.length;i+=4,j+=3){
+      rgbBuf[j]=id.data[i]; rgbBuf[j+1]=id.data[i+1]; rgbBuf[j+2]=id.data[i+2];
+    }
+    pvx.imageSmoothingEnabled = false;
+    pvx.drawImage(capCvs, 0, 0, mw, mh, 0, 0, pv.width, pv.height);
+
+		const now = performance.now();
+    if (ws && ws.readyState === 1 && !sendBusy &&
+			  (now - lastSend) >= CAP_INT &&
+				ws.bufferedAmount < QUEUE_MAX) {
+      sendBusy = true;
+      lastSend = now;
+      sendDDP(ws, 0, mw*mh, rgbBuf);
+      sendBusy = false;
+    }
+  } catch(e){ console.error(e); sendBusy = false; }
+  capBusy = false;
 }
 
 // --- Filtering ---
 function applyFilt(id, useGamma){
-	const thr = +gId('bt').value;
-	const bgc = gId('bg').value.match(/\w\w/g).map(x => parseInt(x, 16));
-	const bri = +gId('br').value / 255;
-	const gam = +gId('gm').value;
-
-	for(let i = 0; i < id.data.length; i += 4){
-		id.data[i] *= bri;
-		id.data[i + 1] *= bri;
-		id.data[i + 2] *= bri;
-
-		if(id.data[i] < thr && id.data[i + 1] < thr && id.data[i + 2] < thr){
-			id.data[i] = bgc[0]; id.data[i + 1] = bgc[1]; id.data[i + 2] = bgc[2];
-		}
-
-		if(useGamma){
-			id.data[i] = Math.min(255, Math.round(Math.pow(id.data[i] / 255, gam) * 255));
-			id.data[i + 1] = Math.min(255, Math.round(Math.pow(id.data[i + 1] / 255, gam) * 255));
-			id.data[i + 2] = Math.min(255, Math.round(Math.pow(id.data[i + 2] / 255, gam) * 255));
+	const d = id.data, t = thr, b0 = bgc[0], b1 = bgc[1], b2 = bgc[2];
+	for(let i=0;i<d.length;i+=4){
+		let r=d[i], g=d[i+1], b=d[i+2];
+		if(r<t && g<t && b<t){ d[i]=b0; d[i+1]=b1; d[i+2]=b2; continue; }
+		if(useGamma){ d[i]=lut[r]; d[i+1]=lut[g]; d[i+2]=lut[b]; }
+		else {
+			d[i]=Math.min(255, Math.round(r * bri));
+			d[i+1]=Math.min(255, Math.round(g * bri));
+			d[i+2]=Math.min(255, Math.round(b * bri));
 		}
 	}
 }
 
 // --- Crop and Preview ---
+const DS_MAX_W = 600, DS_MAX_H = 600; // max size of downscaled video for preview and capture (performance!)
+function updateDownscale(){
+const vw = vid.videoWidth, vh = vid.videoHeight;
+  if (!vw || !vh) return;
+  const s = Math.min(1, DS_MAX_W / vw, DS_MAX_H / vh); // clamp video size
+  const w = Math.max(1, Math.round(vw * s));
+  const h = Math.max(1, Math.round(vh * s));
+  dsCvs.width = w; dsCvs.height = h;
+  dsCtx.imageSmoothingEnabled = false;
+  dsCtx.drawImage(vid, 0, 0, vw, vh, 0, 0, dsCvs.width, dsCvs.height);
+}
+/*
+// downscale with createImageBitmap (seems to be slower)
+async function updateDownscale(){
+  const vw = vid.videoWidth, vh = vid.videoHeight;
+  if (!vw || !vh) return;
+
+  let w = vw, h = vh;
+  if (w > DS_MAX_W) { h *= DS_MAX_W / w; w = DS_MAX_W; }
+  if (h > DS_MAX_H) { w *= DS_MAX_H / h; h = DS_MAX_H; }
+  dsCvs.width  = Math.max(1, Math.round(w));
+  dsCvs.height = Math.max(1, Math.round(h));
+
+  // bitmap resize + draw into dsCvs
+  const bmp = await createImageBitmap(
+    vid, 0, 0, vw, vh,
+    { resizeWidth: dsCvs.width, resizeHeight: dsCvs.height, resizeQuality: 'pixelated' }
+  );
+  //dsCtx.imageSmoothingEnabled = false;
+  //dsCtx.clearRect(0,0,dsCvs.width, dsCvs.height);
+  dsCtx.drawImage(bmp, 0, 0, dsCvs.width, dsCvs.height);
+  bmp.close();
+}*/
+
 function updPrev(){
-	ctx.fillStyle = gId('bg').value;
-	ctx.fillRect(0, 0, cvs.width, cvs.height);
-	ctx.drawImage(vid, vRect.x, vRect.y, vRect.w, vRect.h);
-	drawCrop();
+  ctx.drawImage(dsCvs, 0, 0, dsCvs.width, dsCvs.height, vRect.x, vRect.y, vRect.w, vRect.h);
+  drawCrop();
 }
 
 function drawCrop(){
@@ -896,24 +926,26 @@ function clampCrop(){
 }
 
 // controls
-gId('bg').oninput = ()=>{ if(vInp && !capTmr) updPrev(); };
-gId('bt').oninput = ()=>{ gId('btVal').textContent = gId('bt').value; };
-gId('br').oninput = ()=>{ gId('brVal').textContent = gId('br').value; };
+gId('bg').oninput = ()=>{ buildLUT(); };
+gId('bt').oninput = ()=>{ gId('btVal').textContent = gId('bt').value; buildLUT(); };
+gId('br').oninput = ()=>{ gId('brVal').textContent = gId('br').value; buildLUT(); };
 
 gId('mAsp').onclick = e=>{
 	e.preventDefault();
-	const r = mw / mh; crop.h = crop.w / r; clampCrop(); updPrev();
+	const r = mw / mh; crop.h = crop.w / r; clampCrop();
 };
 
 gId('mSize').onclick = e=>{
 	e.preventDefault(); if(!vInp) return;
-	const sc = vRect.w / vid.videoWidth;
-	crop.w = mw * sc; crop.h = mh * sc; clampCrop(); updPrev();
+	//const sc = vRect.w / vid.videoWidth;
+	//crop.w = mw * sc; crop.h = mh * sc; clampCrop(); updPrev();
+	const sc = vRect.w / dsCvs.width;
+	crop.w = mw * sc; crop.h = mh * sc;
 };
 
 gId('fSize').onclick = e=>{
 	e.preventDefault(); if(!vInp) return;
-	crop.x = vRect.x; crop.y = vRect.y; crop.w = vRect.w; crop.h = vRect.h; clampCrop(); updPrev();
+	crop.x = vRect.x; crop.y = vRect.y; crop.w = vRect.w; crop.h = vRect.h; clampCrop();
 };
 
 gId('rCrop').onclick = e=>{ e.preventDefault(); if(!vInp) return; initCrop(); };
@@ -969,7 +1001,7 @@ function moveDrag(mx, my){
 		case "w": crop.w += (crop.x - mx); crop.x = mx; break;
 		case "e": crop.w = mx - crop.x; break;
 	}
-	clampCrop(); updPrev();
+	clampCrop();
 }
 
 function endDrag(){ drag = false; hand = null; }
@@ -1041,6 +1073,7 @@ function applyPreset(p){
 	gId('br').value = p.br ?? gId('br').value; gId('brVal').textContent = gId('br').value;
 	gId('gm').value = p.gm ?? gId('gm').value; gId('gmVal').textContent = gId('gm').value;
 	gId('bg').value = p.bg ?? gId('bg').value;
+	buildLUT();
 
 	if (typeof p.mute !== 'undefined') vid.muted = !!p.mute;
 	if (typeof p.speed !== 'undefined') {
