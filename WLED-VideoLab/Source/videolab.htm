@@ -1484,7 +1484,7 @@ async function expGif(nm, fps, maxCols) {
 					region[y * w + x] = curr[(minY + y) * gw + (minX + x)];
 				}
 			}
-			wr.addFrame(minX, minY, gw, gh, region, { delay: dlys[i], disposal: 1 });
+			wr.addFrame(minX, minY, w, h, region, { delay: dlys[i], disposal: 1 });
 		}
 	}
 	wr.end();
