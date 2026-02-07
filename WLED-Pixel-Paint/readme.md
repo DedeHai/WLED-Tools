@@ -51,6 +51,7 @@ Download the `pixelpaint.htm.gz` file, connect to your controller, go to the fil
 In **WLED version 0.14** the .gz format is not supported, use the uncompressed `pixelpaint.htm` instead. Moon-Modules fork supports the .gz format.
 The "online" version requires an internet connection on the client side i.e. your PC or phone, internet is **NOT** needed for the controller! This is used to download external libraries (iro.js and omggif.js).
 In order to display the GIFs you create you also require the WLED GIF-player (available by default in 0.16 and Moon-Modules).
+The "offline" version does not fetch iro.js omggif.js from the web and works without any internet connection after installation but only runs in WLED 0.16 and up.
 
 ## License
 
@@ -74,3 +75,8 @@ initial release with base Features
 - added "redo" function
 - slight changes in UI
 - various bugfixes
+
+### Version 1.11
+- bugfixes for 1D segments
+- remove "Freeze Segment" checkmark and always keep painted colors when leaving the page
+- adding offline version (requires WLED 0.16)
