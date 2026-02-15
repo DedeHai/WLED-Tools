@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WLED Font Factory</title>
+    <style>
+        *{box-sizing:border-box;margin:0}
+        body{
+            font-family:system-ui,sans-serif;
+            background:#0a0a0a;
+            color:#e0e0e0;
+            padding:20px;
+            min-height:100vh;
+        }
+        .card{
+            max-width:800px;
+            margin:auto;
+            background:#16213e;
+            padding:30px;
+            border-radius:12px;
+            box-shadow:0 4px 20px rgba(0,242,255,.15);
+            border:1px solid rgba(0,242,255,.1);
+        }
+        h1 {
+            color: #00f2ff;
+            text-align:center;
+            margin-bottom: 20px;
+            font-size: 2.6rem;
+            text-shadow: 0 0 25px #ffffff;
+            padding-bottom: 12px;
+            font-weight: 800;
+            letter-spacing: 2px;
+        }
+        .controls{
+            display:grid;
+            grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+            gap:15px;
+            background:rgba(255,255,255,.03);
+            padding:20px;
+            border-radius:15px;
+            margin-bottom:20px;
+            border:1px solid rgba(0,242,255,.1);
+        }
+        .sliders{
+            justify-items:center;
+            background:rgba(255,255,255,.03);
+            padding:20px;
+            border-radius:15px;
+            margin-bottom:20px;
+            border:1px solid rgba(0,242,255,.1);
+        }
+        label{
+            display:block;
+            font-size:.7rem;
+            font-weight:600;
+            color:#00d4ff;
+            margin-bottom:6px;
+            text-transform:uppercase;
+            letter-spacing:.5px;
+        }
+        input[type="file"]{
+            display:none;
+        }
+        .file-label{
+            display:block;
+            width:100%;
+            padding:10px;
+            border-radius:8px;
+            border:1px solid rgba(0,242,255,.2);
+            background:rgba(0,0,0,.4);
+            color:#888;
+            cursor:pointer;
+            text-align:center;
+            transition:all .3s;
+        }
+        .file-label:hover{
+            border-color:#00f2ff;
+            color:#00f2ff;
+        }
+        .file-label.has-file{
+            color:#00f2ff;
+        }
+        input,button,select{
+            width:100%;
+            padding:10px;
+            border-radius:8px;
+            border:1px solid rgba(0,242,255,.2);
+            background:rgba(0,0,0,.4);
+            color:#fff;
+            transition:all .3s;
+        }
+        select{
+            cursor:pointer;
+        }
+        select:focus,input:focus{
+            outline:none;
+            border-color:#00f2ff;
+            box-shadow:0 0 8px rgba(0,242,255,.3);
+        }
+        input:read-only{color:#00f2ff;font-weight:bold}
+        .range-inputs{
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:10px;
+        }
+        .slider-row{min-width:80%;padding-bottom:20px}
+        input[type="range"]{
+            flex:1;
+            -webkit-appearance:none;
+            height:8px;
+            border-radius:4px;
+            background:linear-gradient(90deg,#0a0a0a 0%,#00f2ff 100%);
+            outline:none;
+            padding:0;
+        }
+        input[type="range"]::-webkit-slider-thumb{
+            -webkit-appearance:none;
+            width:16px;
+            height:16px;
+            border-radius:50%;
+            background:#00f2ff;
+            box-shadow:0 0 10px rgba(0,242,255);
+        }
+        button{
+            padding:14px;
+            border-radius:50px;
+            cursor:pointer;
+            font-weight:bold;
+            background:linear-gradient(135deg,#0095b3 0%,#00d4ff 100%);
+            box-shadow:0 0 14px rgba(0,242,255,.6);
+        }
+        button:hover:not(:disabled){
+            transform:translateY(-2px);
+            box-shadow:0 0 18px rgba(0,242,255,.9);
+        }
+        button:disabled{opacity:.3;cursor:not-allowed;transform:none!important}
+        .preview{
+            background:rgba(0,0,0,.6);
+            padding:20px;
+            border-radius:10px;
+            margin-bottom:20px;
+            border:1px solid rgba(0,242,255,.2);
+            overflow-x:auto;
+        }
+        .preview label{
+            color:#00d4ff;
+            margin-bottom:12px;
+            display:block;
+            font-size:.85rem;
+            font-weight:600;
+        }
+        #txtInput{
+            margin-bottom:15px;
+            background:rgba(0,0,0,.5);
+            border:1px solid rgba(0,242,255,.3);
+            padding:12px;
+            font-size:1rem;
+        }
+        canvas{
+            display:block;
+            background:#000;
+            margin-bottom:5px;
+            border-radius:2px;
+            image-rendering:pixelated;
+            image-rendering:crisp-edges;
+        }
+        #glyphGrid{
+            display:grid;
+            grid-template-columns:repeat(auto-fill,minmax(90px,1fr));
+            gap:6px;
+            max-height:500px;
+            overflow-y:auto;
+            background:rgba(0,0,0,.4);
+            padding:10px;
+            border-radius:10px;
+            border:1px solid rgba(0,242,255,.1);
+        }
+        .glyph{
+            background:rgba(255,255,255,.05);
+            padding:5px;
+            text-align:center;
+            border-radius:8px;
+            border:1px solid rgba(0,242,255,.15);
+            transition:all .3s;
+            overflow:hidden;
+        }
+        .glyph:hover{
+            border-color:rgba(0,242,255,.5);
+            background:rgba(0,242,255,.05);
+            transform:translateY(-2px);
+        }
+        .glyph canvas{
+            max-width:100%;
+            height:auto;
+        }
+        .glyph-info{
+            font-size:.65rem;
+            color:#00d4ff;
+            margin-top:8px;
+            font-family:monospace;
+            font-weight:bold;
+        }
+        .glyph.edit-mode{
+            border-color:#00f2ff;
+        }
+        .extension-section{
+            grid-column:1/-1;
+            background:rgba(0,242,255,.05);
+            padding:15px;
+            border-radius:8px;
+            border:1px solid rgba(0,242,255,.2);
+        }
+        .extension-section h3{
+            color:#00f2ff;
+            font-size:.9rem;
+            margin-bottom:12px;
+            font-weight:600;
+        }
+        .extension-controls{
+            display:grid;
+            grid-template-columns:2fr 1fr;
+            gap:15px;
+        }
+        .info-box{
+            padding:12px;
+            font-size:.8rem;
+        }
+
+        #editModeBtn{
+            padding:6px 12px;
+            font-size:0.75rem;
+            margin-top:8px;
+            max-width:150px;
+        }
+        .glyph-editor{
+            position:fixed;
+            top:50%;
+            left:50%;
+            transform:translate(-50%,-50%);
+            background:#16213e;
+            padding:20px;
+            border-radius:12px;
+            border:2px solid #00f2ff;
+            z-index:1000;
+            display:none;
+            text-align: center;
+        }
+        .glyph-editor.active{
+            display:block;
+        }
+        .glyph-editor button{
+            padding:6px 12px;
+            font-size:0.75rem;
+            margin-top:8px;
+            max-width:50%;
+        }
+        .editor-grid{
+            display:inline-grid;
+            gap:2px;
+            background:#0a0a0a;
+            padding:10px;
+            max-width:400px;
+        }
+        .editor-pixel{
+            aspect-ratio:1;
+            background:#1a1a1a;
+            border:1px solid #333;
+            cursor:pointer;
+            touch-action:none;
+        }
+        .editor-pixel.on{
+            background:#00f2ff;
+        }
+     
+    </style>
+</head>
+<body>
+<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.9 Beta</div>
+<div class="card">
+    <h1>WLED Font Factory</h1>
+    <div class="controls">
+        <div>
+            <label>Font File</label>
+            <input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2,.bdf,.wbf">
+            <label for="fontFile" class="file-label" id="fileLabel">Load Font</label>
+            <label style="font-size:.6rem;">&nbsp;TTF OTF WOFF BDF WBF</label>
+        </div>
+        <div>
+            <label>Letter Spacing</label>
+            <input type="number" id="spacing" value="1" min="0" max="9" oninput="spacing=parseInt(this.value);updatePixel();updateTTF();">
+        </div>
+        <div>
+            <label>Font Height</label>
+            <input type="number" id="height" readonly>
+        </div>
+        <div>
+            <label>Max Glyph Width</label>
+            <input type="number" id="maxWidth" readonly value="0">
+        </div>
+        <div>
+            <label>File Size (bytes)</label>
+            <input type="number" id="fileSize" readonly>
+        </div>
+     </div>
+     <div id=ttfCont class="sliders">
+        <label>Base Size</label>
+        <div class="slider-row">
+            <input type="range" id="renderSize" min="4" max="128" value="48" step="1">
+        </div>
+
+        <label>Sample Interval</label>
+        <div class="slider-row">
+            <input type="range" id="sampleSize" min="1" max="8" value="3" step="1">
+        </div>
+
+        <label>Threshold</label>
+        <div class="slider-row">
+            <input type="range" id="threshold" min="0" max="254" value="128" step="1">
+        </div>
+    </div>
+    <div class="preview">
+        <label>Preview</label>
+        <input type="text" id="txtInput" value="ABC xyz 12:34">
+        <canvas id="pixelCanvas"></canvas>
+    </div>
+
+    <div class="preview">
+        <label>TTF Font Comparison</label>
+        <canvas id="ttfCanvas"></canvas>
+    </div>
+
+    <div class="controls">
+        <div>
+            <label>Character Range</label>
+            <div class="range-inputs">
+                <input type="number" id="firstChar" min="0" max="255" placeholder="First" value="32">
+                <input type="number" id="lastChar" min="0" max="255" placeholder="Last" value="127">
+            </div>
+        </div>
+
+        <div class="extension-section">
+            <h3>UTF-8 Extension (chars 128-255)</h3>
+            <div class="extension-controls">
+                <div>
+                    <label>Language Extension</label>
+                    <select id="extension">
+                        <option value="0">None (ASCII only, 0-127)</option>
+                        <option value="0x00A0">Latin-1 (ä,ß,ñ,é,ç)</option>
+                        <option value="0x0100">Latin-A (ą,ć,ł,ś,ž)</option>
+                        <option value="0x0380">Greek (α,β,γ,δ,ε)</option>
+                        <option value="0x0400">Cyrillic (б,ж,щ,є,і)</option>
+                        <option value="0x0590">Hebrew (א,ב,ג,ד)</option>
+                        <option value="0x10A0">Georgian (ა,ბ,გ,დ)</option>
+                        <option value="0x0530">Armenian (ա,բ,գ,դ)</option>
+                        <option value="0x0E00">Thai (ก,ข,ค,ง)</option>
+                        <option value="0x0E80">Lao (ກ,ຂ,ຄ,ງ)</option>
+                        <option value="0x1EA0">Vietnamese (ạ,ế,ồ,ư)</option>
+                        <option value="">Custom</option>
+                    </select>
+                </div>
+                <div>
+                    <label>UTF-8 Offset (Hex)</label>
+                    <input type="text" id="utf8Offset" placeholder="0x0000" value="0x0000" maxlength="6">
+                </div>
+            </div>
+            <div class="info-box">
+                 When an extension is selected, characters 128-255 in the font will map to the UTF-8 range starting at the offset. A default font is used if glyphs are not available.<br> Use Preview to test.
+            </div>
+        </div>
+      </div>
+ 
+    <div class="preview">
+        <label id="glyphLabel">Font Glyphs</label>
+        <div id="glyphGrid"></div>
+        <button id="editModeBtn">Enable Edit Mode</button>
+    </div>
+    <div id="glyphEditor" class="glyph-editor">
+        <h3 style="color:#00f2ff;margin-bottom:10px">Edit Glyph</h3>
+        <div id="editorGrid" class="editor-grid"></div>
+        <button onclick="saveGlyphEdit()">Save</button>
+        <button onclick="closeGlyphEditor()">Cancel</button>
+    </div>
+    <button id="dlBtn" disabled>DOWNLOAD WLED BITMAP FONT (.wbf)</button>
+	<div style="text-align:center;font-size:12px;color:#666;"><br>by @dedehai | github.com/DedeHai/WLED-Tools</div>
+
+</div>
+
+<script>
+    const $ = id => document.getElementById(id);
+    const el = {
+        fontFile: $('fontFile'),
+        ttfCont: $('ttfCont'),
+        renderSize: $('renderSize'),
+        sampleSize: $('sampleSize'),
+        spacing: $('spacing'),
+        threshold: $('threshold'),
+        txtInput: $('txtInput'),
+        dlBtn: $('dlBtn'),
+        pixelCanvas: $('pixelCanvas'),
+        ttfCanvas: $('ttfCanvas'),
+        glyphGrid: $('glyphGrid'),
+        glyphLabel: $('glyphLabel'),
+        height: $('height'),
+        maxWidth: $('maxWidth'),
+        firstChar: $('firstChar'),
+        lastChar: $('lastChar'),
+        fileSize: $('fileSize'),
+        extension: $('extension'),
+        utf8Offset: $('utf8Offset'),
+        editModeBtn: $('editModeBtn')
+    };
+
+    const SCALE = 4;
+    let fontName = "font";
+    let spacing = 1; // Initialize spacing variable
+    let disabledGlyphs = new Set(); // Track disabled glyphs
+    let pixelFontMode = false; // Track if we're in pixel font mode (WBF/BDF)
+    let bdfGlyphMap = new Map(); // Store original BDF glyph Unicode -> bitmap mapping
+    let font = { h: 0, w: new Uint8Array(256), bmp: [], first: 0, last: 255, utf8Offset: 0 };
+    let customFontLoaded = false;
+    let currentFontFamily = 'system-ui, Consolas, Monaco, monospace';
+    let editMode = false;
+    let editingIdx = -1;
+    let editingBmp = null;
+
+    function getSample() {
+        return parseInt(el.sampleSize.value);
+    }
+
+    function updatePixelFontSettings() {
+        font.utf8Offset = parseUtf8Offset();
+        if (bdfGlyphMap.size > 0) remapBDFGlyphs();
+        const offsetStr = font.utf8Offset > 0 ? ` + UTF-8 0x${font.utf8Offset.toString(16).toUpperCase()}` : '';
+        el.glyphLabel.textContent = `Generated Glyphs (${font.first}-${font.last}${offsetStr})`;
+        renderGrid();
+        updatePixel();
+    }
+
+    el.extension.addEventListener('change', () => {
+        const val = el.extension.value;
+        el.utf8Offset.value = val === "0" ? "0x0000" : (val || el.utf8Offset.value);
+        lastChar.value = val === "0" ? 127 : 255;
+        if (pixelFontMode) updatePixelFontSettings();
+        else if (customFontLoaded) processFont();
+    });
+
+    el.utf8Offset.addEventListener('input', () => {
+        let val = el.utf8Offset.value.trim();
+        if (val === "" || val === "0x0000" || val === "0") {
+            el.extension.value = "0";
+            lastChar.value = 127;
+        } else {
+            lastChar.value = 255;
+            // Check if it matches one of the presets
+            let matched = false;
+            for (let opt of el.extension.options) {
+                if (opt.value === val) {
+                    el.extension.value = val;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                el.extension.value = ""; // Set to custom
+            }
+        }
+
+    });
+
+    el.utf8Offset.addEventListener('change', () => {
+        if (pixelFontMode) updatePixelFontSettings();
+        else if (customFontLoaded) processFont();
+    });
+
+    el.renderSize.addEventListener('input', () => {
+        if (customFontLoaded && !pixelFontMode) processFont();
+    });
+
+    el.sampleSize.addEventListener('input', () => {
+        if (customFontLoaded && !pixelFontMode) processFont();
+    });
+
+    el.threshold.addEventListener('input', () => {
+        if (customFontLoaded && !pixelFontMode) processFont();
+    });
+
+    el.fontFile.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const fileLabel = document.getElementById('fileLabel');
+        fileLabel.textContent = file.name;
+        fileLabel.classList.add('has-file');
+
+        const fileName = file.name.toLowerCase();
+
+        if (fileName.endsWith('.wbf')) {
+            await loadWBF(file);
+        } else if (fileName.endsWith('.bdf')) {
+            await loadBDF(file);
+        } else {
+            // TTF/OTF handling
+            setPixelFontMode(false); // Reset to TTF mode
+            fontName = file.name.replace(/\.[^.]+$/, '');
+
+            const fr = new FileReader();
+            fr.onload = () => {
+                const fontFace = new FontFace(fontName, fr.result);
+                fontFace.load().then(f => {
+                    document.fonts.add(f);
+                    currentFontFamily = fontName;
+                    customFontLoaded = true;
+                    processFont();
+                }).catch(err => {
+                    alert('Font load error: ' + err);
+                });
+            };
+            fr.readAsArrayBuffer(file);
+        }
+    });
+
+    el.spacing.addEventListener('change', () => {
+        if (customFontLoaded && !pixelFontMode) processFont();
+    });
+
+     el.firstChar.addEventListener('change', () => {
+        const maxFirst = parseInt(el.lastChar.value);
+        if(parseInt(el.firstChar.value) > maxFirst)
+            el.firstChar.value = maxFirst;
+
+        if (pixelFontMode) {
+            // Update font range and re-render in pixel font mode
+            font.first = parseInt(el.firstChar.value);
+            calcSize();
+            renderGrid();
+            updatePixel();
+        } else if (customFontLoaded) {
+            processFont();
+        }
+    });
+
+    el.lastChar.addEventListener('change', () => {
+        const minLast = parseInt(el.firstChar.value);
+        if(parseInt(el.lastChar.value) < minLast)
+            el.lastChar.value = minLast;
+
+        if (pixelFontMode) {
+            // Update font range and re-render in pixel font mode
+            font.last = parseInt(el.lastChar.value);
+            calcSize();
+            renderGrid();
+            updatePixel();
+        } else if (customFontLoaded) {
+            processFont();
+        }
+    });
+
+    el.txtInput.addEventListener('input', () => {
+        updatePixel();
+        updateTTF();
+    });
+
+    el.editModeBtn.onclick = () => {
+        editMode = !editMode;
+        el.editModeBtn.textContent = editMode ? 'Click Glyph to Edit' : 'Enable Edit Mode';
+        el.editModeBtn.classList.toggle('active');
+        document.querySelectorAll('.glyph').forEach(g => {
+            if (editMode) g.classList.add('edit-mode');
+            else g.classList.remove('edit-mode');
+        });
+    };
+
+    let processTimer;
+    function processFont() {
+        if (pixelFontMode) return; // Don't reprocess pixel fonts
+        clearTimeout(processTimer);
+        processTimer = setTimeout(() => processFontAsync(), 100);
+    }
+
+    function parseUtf8Offset() {
+        let val = el.utf8Offset.value.trim();
+        if (val === "" || val === "0" || val === "0x0000") return 0;
+
+        if (val.startsWith("0x") || val.startsWith("0X")) {
+            return parseInt(val, 16);
+        }
+        return parseInt(val, 10);
+    }
+
+    function getCharCodeForIndex(idx) {
+        const offset = parseUtf8Offset();
+        if (idx >= 128 && offset > 0) {
+            // Map index 128-255 to Unicode range starting at offset
+            return offset + (idx - 128);
+        }
+        return idx;
+    }
+
+    // Map UTF-8 character code to font index
+    // Map UTF-8 character code to font index
+    function getIndexForCharCode(charCode) {
+        const offset = parseUtf8Offset();
+        
+        if (charCode < 128) {
+            // ASCII - direct mapping
+            return charCode;
+        }
+        
+        if (offset > 0) {
+            // Extended range - map Unicode starting at offset to indices 128-255
+            const relativePos = charCode - offset;
+            const idx = 128 + relativePos;
+            if (idx >= 128 && idx <= 255) {
+                return idx;
+            }
+        } else {
+            // No offset - direct mapping if in range
+            if (charCode >= 0 && charCode <= 255) {
+                return charCode;
+            }
+        }
+
+        return -1; // Not in font
+    }
+
+    // helper function to sample pixels from rendered font
+    function samplePixel(imgData, x, y, sample, thresh) {
+        const srcX = x * sample + Math.floor(sample / 2);
+        const srcY = y * sample + Math.floor(sample / 2);
+        const idx = (srcY * imgData.width + srcX) * 4;
+        const pixelValue = imgData.data[idx + 3] || imgData.data[idx];
+        return pixelValue > thresh;
+    }
+
+    // helper function to pack bits
+    function packBits(bits, width, height) {
+        const numBytes = Math.ceil((width * height) / 8);
+        const bytes = new Uint8Array(numBytes);
+        for (let i = 0; i < bits.length; i++) {
+            if (bits[i]) {
+                bytes[i >> 3] |= (1 << (7 - (i & 7)));
+            }
+        }
+        return bytes;
+    }
+    function recalculateFontDimensions() {
+        let maxW = 0;
+        let minY = font.h;
+        let maxY = 0;
+
+        for (let i = 0; i < 256; i++) {
+            if (font.w[i] > maxW)
+                maxW = font.w[i];
+            for (let bit = 0; bit < font.w[i] * font.h; bit++) {
+                if (font.bmp[i][bit >> 3] & (1 << (7 - (bit & 7)))) {
+                    const y = Math.floor(bit / font.w[i]);
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+        }
+
+        const newH = maxY - minY + 1;
+        if (newH < font.h && maxY >= minY) {
+            for (let i = 0; i < 256; i++) {
+                if (font.w[i] === 0) continue;
+                const w = font.w[i];
+                const newBmp = new Uint8Array(Math.ceil(w * newH / 8));
+                for (let bit = 0; bit < w * newH; bit++) {
+                    const oldBit = (Math.floor(bit / w) + minY) * w + (bit % w);
+                    if (font.bmp[i][oldBit >> 3] & (1 << (7 - (oldBit & 7)))) {
+                        newBmp[bit >> 3] |= 1 << (7 - (bit & 7));
+                    }
+                }
+                font.bmp[i] = newBmp;
+            }
+            font.h = newH;
+        }
+
+        el.maxWidth.value = maxW;
+        el.height.value = font.h;
+    }
+
+    async function processFontAsync() {
+        const first = parseInt(el.firstChar.value);
+        const last = parseInt(el.lastChar.value);
+        const renderSz = parseInt(el.renderSize.value);
+        const sample = getSample();
+        const thresh = parseInt(el.threshold.value);
+        const utf8Offset = parseUtf8Offset();
+
+        const prog = document.getElementById('progress');
+        if (prog) prog.style.display = 'block';
+
+        // Initialize font
+        font.h = Math.ceil(renderSz / sample * 1.5); // 50% headroom (just in case)
+        font.first = first;
+        font.last = last;
+        font.utf8Offset = utf8Offset;
+        font.w = new Array(256).fill(0);
+        font.bmp = new Array(256);
+        for (let i = 0; i < 256; i++) {
+            font.bmp[i] = new Uint8Array(0);
+        }
+
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.font = `${renderSz}px ${currentFontFamily}`;
+
+        // Step 1: Render each glyph and store raw bitmap
+        const rawGlyphs = [];
+        for (let i = first; i <= last; i++) {
+            // Skip disabled glyphs
+            if (disabledGlyphs.has(i)) {
+                rawGlyphs.push(null);
+                continue;
+            }
+
+            const charCode = getCharCodeForIndex(i);
+            const ch = String.fromCodePoint(charCode);
+
+            const metrics = ctx.measureText(ch);
+            const w = Math.ceil(metrics.width / sample);
+            const h = font.h;
+
+            if (w === 0 || h === 0) {
+                rawGlyphs.push(null);
+                continue;
+            }
+
+            // Render glyph at high resolution
+            const cvs = document.createElement('canvas');
+            cvs.width = w * sample;
+            cvs.height = h * sample * 1.5; // add 50% headroom
+            const c = cvs.getContext('2d');
+            c.imageSmoothingEnabled = false;
+            c.font = `${renderSz}px ${currentFontFamily}`;
+            c.fillStyle = 'white';
+            c.textBaseline = 'top';
+            c.fillText(ch, 0, Math.ceil(renderSz * 0.3)); // add some wiggle room at the top
+
+            const imgData = c.getImageData(0, 0, cvs.width, cvs.height);
+            rawGlyphs.push({ width: w, height: h, imgData });
+        }
+
+        // Step 2: Find overall vertical bounds using threshold
+        let globalMinY = font.h;
+        let globalMaxY = 0;
+        let hasAnyContent = false;
+
+        for (let glyphData of rawGlyphs) {
+            if (!glyphData) continue;
+
+            const { width, height, imgData } = glyphData;
+
+            // Sample and threshold each pixel to find bounds
+            for (let y = 0; y < height; y++) {
+                let rowHasContent = false;
+                for (let x = 0; x < width; x++) {
+                    // Sample the center of each logical pixel
+                    if (samplePixel(imgData, x, y, sample, thresh)) {
+                        rowHasContent = true;
+                        hasAnyContent = true;
+                        break;
+                    }
+                }
+
+                if (rowHasContent) {
+                    if (y < globalMinY) globalMinY = y;
+                    if (y > globalMaxY) globalMaxY = y;
+                }
+            }
+        }
+
+        // Trim empty rows if found
+        if (hasAnyContent && (globalMinY > 0 || globalMaxY < font.h - 1)) {
+            font.h = globalMaxY - globalMinY + 1;
+        }
+
+        // Step 3: Process each glyph with known height and threshold
+        for (let i = 0; i < rawGlyphs.length; i++) {
+            const glyphIdx = first + i;
+            const glyphData = rawGlyphs[i];
+            if (!glyphData) continue;
+
+            const { width, height, imgData } = glyphData;
+
+            // 1. Find the actual content bounds for THIS glyph
+            let minX = width;
+            let maxX = -1;
+            const tempBits = [];
+
+            // First pass: sample everything and find min/max X
+            for (let y = globalMinY; y <= globalMaxY; y++) {
+                for (let x = 0; x < width; x++) {
+                    const isPixel = samplePixel(imgData, x, y, sample, thresh);
+                    if (isPixel) {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                    }
+                }
+            }
+
+            // Handle empty/space characters
+            if (maxX === -1) {
+                // It's a space. Use a default width (e.g., 1/3 of height)
+                font.w[glyphIdx] = Math.ceil(font.h / 3);
+                font.bmp[glyphIdx] = new Uint8Array(Math.ceil((font.w[glyphIdx] * font.h) / 8));
+                continue;
+            }
+
+            // 2. Extract only the useful columns
+            const trimmedWidth = maxX - minX + 1;
+            const packedBits = [];
+
+            for (let y = globalMinY; y <= globalMaxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    packedBits.push(samplePixel(imgData, x, y, sample, thresh) ? 1 : 0);
+                }
+            }
+
+            font.w[glyphIdx] = trimmedWidth;
+            font.bmp[glyphIdx] = packBits(packedBits, trimmedWidth, font.h);
+        }
+
+        // Update UI
+        el.height.value = font.h;
+        let maxW = 0;
+        for (let i = font.first; i <= font.last; i++) {
+            if (!disabledGlyphs.has(i) && font.w[i] > maxW) maxW = font.w[i];
+        }
+        el.maxWidth.value = maxW;
+
+        const offsetStr = utf8Offset > 0 ? ` + UTF-8 0x${utf8Offset.toString(16).toUpperCase()}` : '';
+        el.glyphLabel.textContent = `Generated Glyphs (${first}-${last}${offsetStr})`;
+
+        if (prog) prog.style.display = 'none';
+        calcSize();
+        renderGrid();
+        updatePixel();
+        updateTTF();
+        el.dlBtn.disabled = false;
+    }
+
+    function calcSize() {
+        // Header: 12 bytes
+        let sz = 12 + (font.last - font.first + 1);
+        for (let i = font.first; i <= font.last; i++) {
+            if (!disabledGlyphs.has(i)) {
+                sz += font.bmp[i].length;
+            }
+        }
+        el.fileSize.value = sz;
+    }
+
+    function drawGlyph(cvs, idx, scale) {
+        const w = font.w[idx];
+        const h = font.h;
+        const bits = font.bmp[idx];
+        cvs.width = Math.max(w, 1) * scale;
+        cvs.height = h * scale;
+
+        const ctx = cvs.getContext('2d');
+        ctx.fillStyle = "#222";
+        ctx.fillRect(0, 0, cvs.width, cvs.height);
+        ctx.fillStyle = "#00f2ff";
+
+        let bitIdx = 0;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const bytePos = Math.floor(bitIdx / 8);
+                const bitPos = 7 - (bitIdx % 8);
+
+                if (bytePos < bits.length && (bits[bytePos] >> bitPos) & 1) {
+                    ctx.fillRect(x * scale, y * scale, scale - 1, scale - 1);
+                }
+                bitIdx++;
+            }
+        }
+    }
+
+    function renderGrid() {
+        el.glyphGrid.innerHTML = '';
+        for (let i = font.first; i <= font.last; i++) {
+            if (font.w[i] === 0 && !disabledGlyphs.has(i)) continue;
+            const unit = document.createElement('div');
+            unit.className = 'glyph';
+            if (disabledGlyphs.has(i)) {
+                unit.style.opacity = '0.2';
+                unit.style.border = '2px dashed #f44336';
+            }
+            const cvs = document.createElement('canvas');
+            drawGlyph(cvs, i, SCALE);
+            unit.appendChild(cvs);
+            const info = document.createElement('div');
+            info.className = 'glyph-info';
+            const charCode = getCharCodeForIndex(i);
+            const ch = String.fromCodePoint(charCode);
+            const displayWidth = disabledGlyphs.has(i) ? 0 : font.w[i];
+
+            if (charCode > 0xFF) {
+                info.textContent = `#${i} U+${charCode.toString(16).toUpperCase()} '${ch}' W:${displayWidth}`;
+            } else {
+                info.textContent = `#${i} '${ch}' W:${displayWidth}`;
+            }
+
+            if (disabledGlyphs.has(i)) {
+                info.textContent += ' [DISABLED]';
+            }
+
+            unit.appendChild(info);
+
+            // Click to toggle disabled state
+            unit.addEventListener('click', () => {
+                if (editMode) {
+                    openGlyphEditor(i);
+                    editMode = false;
+                    el.editModeBtn.textContent = 'Enable Edit Mode';
+                    el.editModeBtn.classList.remove('active');
+                    return;
+                }
+                if (disabledGlyphs.has(i)) {
+                    disabledGlyphs.delete(i);
+                } else {
+                    disabledGlyphs.add(i);
+                }
+                calcSize();
+                renderGrid();
+                updatePixel();
+            });
+
+            el.glyphGrid.appendChild(unit);
+        }
+    }
+
+    function updatePixel() {
+        if (!font.h) return;
+        const txt = el.txtInput.value;
+        const ctx = el.pixelCanvas.getContext('2d');
+        const letterSp = spacing; // Use the spacing variable
+
+        // Calculate width using UTF-8 mapping
+        let totW = 2;
+        for(let i=0; i<txt.length; i++) {
+            const charCode = txt.codePointAt(i);
+            const idx = getIndexForCharCode(charCode);
+            // Check if index is within range and not disabled
+            if (idx >= font.first && idx <= font.last && idx >= 0 && idx < 256 && !disabledGlyphs.has(idx)) {
+                totW += (font.w[idx] || 0) + letterSp;
+            }
+            // Handle surrogate pairs
+            if (charCode > 0xFFFF) i++;
+        }
+        el.pixelCanvas.width = totW * SCALE;
+        el.pixelCanvas.height = font.h * SCALE;
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, el.pixelCanvas.width, el.pixelCanvas.height);
+        ctx.fillStyle = "#00f2ff";
+
+        let xOff = 1;
+        for (let i = 0; i < txt.length; i++) {
+            const charCode = txt.codePointAt(i);
+            const idx = getIndexForCharCode(charCode);
+
+            // Check if index is within range, not disabled, and valid
+            if (idx < font.first || idx > font.last || idx < 0 || idx >= 256 || disabledGlyphs.has(idx)) {
+                // Character not in font range or disabled, skip
+                if (charCode > 0xFFFF) i++;
+                continue;
+            }
+
+            const w = font.w[idx];
+            const bits = font.bmp[idx];
+
+            let bitIdx = 0;
+            for (let y = 0; y < font.h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const bytePos = Math.floor(bitIdx / 8);
+                    const bitPos = 7 - (bitIdx % 8);
+
+                    if (bytePos < bits.length && (bits[bytePos] >> bitPos) & 1) {
+                        ctx.fillRect((xOff + x) * SCALE, y * SCALE, SCALE - 1, SCALE - 1);
+                    }
+                    bitIdx++;
+                }
+            }
+            xOff += w + letterSp; // Add spacing after each character
+            // Handle surrogate pairs
+            if (charCode > 0xFFFF) i++;
+        }
+    }
+
+    function updateTTF() {
+        const txt = el.txtInput.value;
+        const renderSz = parseInt(el.renderSize.value) * 0.9;
+        const sample = getSample();
+        const letterSp = parseInt(el.spacing.value);
+        const ctx = el.ttfCanvas.getContext('2d');
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.font = `${renderSz}px ${currentFontFamily}`;
+        const metrics = ctx.measureText(txt);
+        const txtW = Math.ceil(metrics.width);
+        const extraSp = (txt.length - 1) * letterSp * sample;
+
+        el.ttfCanvas.width = Math.ceil((txtW + extraSp + 10) / sample) * SCALE;
+        el.ttfCanvas.height = Math.ceil(renderSz / sample) * SCALE *1.2;
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, el.ttfCanvas.width, el.ttfCanvas.height);
+
+        const scale = SCALE / sample;
+        ctx.scale(scale, scale);
+        ctx.font = `${renderSz}px ${currentFontFamily}`;
+        //ctx.fillStyle = "#9d51fb";
+        ctx.fillStyle = "#00c2cc";
+        ctx.textBaseline = "top";
+
+        let xPos = 5;
+        for (let i = 0; i < txt.length; i++) {
+            const ch = txt[i];
+            ctx.fillText(ch, xPos, 5);
+            const chMetrics = ctx.measureText(ch);
+            xPos += chMetrics.width + letterSp * sample;
+        }
+    }
+
+    el.dlBtn.addEventListener('click', () => {
+        const cnt = font.last - font.first + 1;
+        let maxwidth = 0;
+        for (let i = 0; i < cnt; i++) {
+            if (!disabledGlyphs.has(font.first + i) && font.w[font.first + i] > maxwidth) {
+                maxwidth = font.w[font.first + i];
+            }
+        }
+
+        // Header (12 bytes)
+        const offset = font.utf8Offset || 0;
+        const hdr = new Uint8Array([
+            0x57,                  // Magic byte 'W'
+            font.h,                // Height
+            maxwidth,              // Width of widest glyph
+            spacing,               // Spacing between glyphs to use in rendering
+            0x01,                  // Version (upper4 bits) & Flags: 1 = use per glyph width
+            font.first,            // First character
+            font.last,             // Last character
+            0x00,                  // Reserved byte for future use
+            offset & 0xFF,         // UTF-8 offset byte 1
+            (offset >> 8) & 0xFF,  // UTF-8 offset byte 2
+            (offset >> 16) & 0xFF, // UTF-8 offset byte 3
+            (offset >> 24) & 0xFF  // UTF-8 offset byte 4
+        ]);
+
+        const wTable = new Uint8Array(cnt);
+        for (let i = 0; i < cnt; i++) {
+            const glyphIdx = font.first + i;
+            wTable[i] = disabledGlyphs.has(glyphIdx) ? 0 : font.w[glyphIdx];
+        }
+
+        let bmpSz = 0;
+        for (let i = font.first; i <= font.last; i++) {
+            if (!disabledGlyphs.has(i)) {
+                bmpSz += font.bmp[i].length;
+            }
+        }
+
+        // Total: 12 bytes header + width table + bitmap data
+        const file = new Uint8Array(12 + cnt + bmpSz);
+        file.set(hdr, 0);
+        file.set(wTable, 12);
+
+        let ptr = 12 + cnt;
+        for (let i = font.first; i <= font.last; i++) {
+            if (!disabledGlyphs.has(i)) {
+                file.set(font.bmp[i], ptr);
+                ptr += font.bmp[i].length;
+            }
+        }
+
+        const blob = new Blob([file], { type: 'application/octet-stream' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+
+        let filename = `${fontName}_${font.h}px`;
+        if (font.utf8Offset > 0) {
+            filename += `_utf8_${font.utf8Offset.toString(16)}`;
+        }
+        a.download = `${filename}.wbf`;
+        a.click();
+    });
+
+    function setPixelFontMode(enabled) {
+        pixelFontMode = enabled;
+        // Hide/show TTF preview & controls
+        const ttfPreview = el.ttfCanvas.parentElement;
+        ttfPreview.style.display = enabled ? 'none' : 'block';
+        ttfCont.style.display = enabled ? 'none' : '';
+    }
+
+    async function loadWBF(file) {
+        const arrayBuffer = await file.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+
+        // Parse header
+        if (data[0] !== 0x57) {
+            alert('Invalid WBF file - wrong magic byte');
+            return;
+        }
+
+        const h = data[1];
+        const maxW = data[2];
+        const sp = data[3];
+        const flags = data[4];
+        const first = data[5];
+        const last = data[6];
+        // data[7] is reserved for future use
+        const utf8Offset = data[8] | (data[9] << 8) | (data[10] << 16) | (data[11] << 24);
+        console.log(utf8Offset);
+        const cnt = last - first + 1;
+
+        // Read width table
+        const widths = Array.from(data.slice(12, 12 + cnt));
+
+        // Read bitmap data
+        let ptr = 12 + cnt;
+        const bitmaps = [];
+
+        for (let i = 0; i < cnt; i++) {
+            const w = widths[i];
+            const bmpSize = Math.ceil((w * h) / 8);
+            bitmaps.push(data.slice(ptr, ptr + bmpSize));
+            ptr += bmpSize;
+        }
+
+        // Set up font object
+        font.h = h;
+        font.first = first;
+        font.last = last;
+        font.utf8Offset = utf8Offset;
+        font.w = new Array(256).fill(0);
+        font.bmp = new Array(256).fill(null).map(() => new Uint8Array(0));
+
+        for (let i = 0; i < cnt; i++) {
+            font.w[first + i] = widths[i];
+            font.bmp[first + i] = bitmaps[i];
+        }
+
+        // Update UI
+        spacing = sp;
+        el.spacing.value = sp;
+        fontName = file.name.replace(/\.[^.]+$/, '');
+        el.height.value = h;
+        el.maxWidth.value = maxW;
+        // Update character range inputs
+        el.firstChar.value = first;
+        el.lastChar.value = last;
+
+        // Update UTF-8 offset in UI
+        if (utf8Offset > 0) {
+            el.utf8Offset.value = '0x' + utf8Offset.toString(16).toUpperCase();
+
+            // Try to match preset extension
+            let matched = false;
+            for (let opt of el.extension.options) {
+                if (parseInt(opt.value, 16) === utf8Offset) {
+                    el.extension.value = opt.value;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                el.extension.value = "0"; // Set to custom but keep the offset
+            }
+        } else {
+            el.utf8Offset.value = '0x0000';
+            el.extension.value = "0";
+        }
+
+        const offsetStr = utf8Offset > 0 ? ` + UTF-8 0x${utf8Offset.toString(16).toUpperCase()}` : '';
+        el.glyphLabel.textContent = `Generated Glyphs (${first}-${last}${offsetStr})`;
+
+        disabledGlyphs.clear();
+        calcSize();
+        renderGrid();
+        updatePixel();
+        el.dlBtn.disabled = false;
+        setPixelFontMode(true);
+        customFontLoaded = true; // Prevent reprocessing
+    }
+
+    function remapBDFGlyphs() {
+        if (bdfGlyphMap.size === 0) return;
+
+        const utf8Offset = parseUtf8Offset();
+        const first = parseInt(el.firstChar.value);
+        const last = parseInt(el.lastChar.value);
+
+        // 1. Reset current font buffers completely
+        font.w = new Uint8Array(256).fill(0);
+        font.bmp = new Array(256).fill(null).map(() => new Uint8Array(0));
+        font.first = first;
+        font.last = last;
+        font.utf8Offset = utf8Offset;
+
+        // 2. Map from BDF Unicode Map -> WLED Linear Index
+        for (let [unicodeValue, glyphData] of bdfGlyphMap.entries()) {
+            let idx = -1;
+
+            if (unicodeValue < 127) {
+                idx = unicodeValue; // Standard ASCII
+            } else if (utf8Offset > 0) {
+                // Map Unicode range [offset...offset+128] to [127...255]
+                const relativePos = unicodeValue - utf8Offset;
+                if (relativePos >= 0 && relativePos <= 128) {
+                    idx = 127 + relativePos;
+                }
+            } else if (unicodeValue <= 255) {
+                idx = unicodeValue; // Direct mapping if no offset
+            }
+
+            // 3. Assign to font object if it fits in our 0-255 window
+            if (idx >= 0 && idx <= 255) {
+                font.w[idx] = glyphData.width;
+                font.bmp[idx] = glyphData.bitmap;
+            }
+        }
+
+        // Update UI constraints
+        let maxW = 0;
+        for (let i = 0; i < 256; i++) {
+            if (font.w[i] > maxW) maxW = font.w[i];
+        }
+        el.maxWidth.value = maxW;
+        el.height.value = font.h;
+    }
+
+    async function loadBDF(file) {
+        const text = await file.text();
+        const lines = text.split('\n');
+
+        let glyphs = [];
+        let currentGlyph = null;
+        let inBitmap = false;
+        let fontHeight = 0;
+        let fontBBX = null;
+        let defaultChar = -1;
+
+        for (let line of lines) {
+            line = line.trim();
+            if (line.startsWith('FONTBOUNDINGBOX')) {
+                const parts = line.split(/\s+/);
+                fontBBX = {
+                    width: parseInt(parts[1]),
+                    height: parseInt(parts[2]),
+                    xoff: parseInt(parts[3]),
+                    yoff: parseInt(parts[4])
+                };
+                fontHeight = fontBBX.height;
+            }
+            if (line.startsWith('DEFAULT_CHAR')) {
+                defaultChar = parseInt(line.split(/\s+/)[1]);
+            }
+            
+            if (line.startsWith('STARTCHAR')) {
+                currentGlyph = {
+                    name: line.substring(10).trim(),
+                    encoding: -1,
+                    bitmap: [],
+                    bbx: null
+                };
+            }
+            
+            if (line.startsWith('ENCODING')) {
+                if (currentGlyph) {
+                    currentGlyph.encoding = parseInt(line.split(/\s+/)[1]);
+                }
+            }
+            
+            if (line.startsWith('BBX')) {
+                if (currentGlyph) {
+                    const parts = line.split(/\s+/);
+                    currentGlyph.bbx = {
+                        width: parseInt(parts[1]),
+                        height: parseInt(parts[2]),
+                        xoff: parseInt(parts[3]),
+                        yoff: parseInt(parts[4])
+                    };
+                }
+            }
+            
+            if (line.startsWith('BITMAP')) {
+                inBitmap = true;
+                continue;
+            }
+            
+            if (line.startsWith('ENDCHAR')) {
+                if (currentGlyph && currentGlyph.encoding >= 0) {
+                    glyphs.push(currentGlyph);
+                }
+                currentGlyph = null;
+                inBitmap = false;
+            }
+            
+            if (inBitmap && currentGlyph && line.length > 0 && !line.startsWith('ENDCHAR')) {
+                currentGlyph.bitmap.push(line);
+            }
+        }
+        
+        if (glyphs.length === 0) {
+            alert('No glyphs found in BDF file');
+            return;
+        }
+        
+        // Clear and populate bdfGlyphMap with original Unicode -> bitmap mapping
+        bdfGlyphMap.clear();
+        
+        for (let g of glyphs) {
+            const width = g.bbx ? g.bbx.width : fontBBX.width;
+            const glyphHeight = g.bbx ? g.bbx.height : fontBBX.height;
+            const yoff = g.bbx ? g.bbx.yoff : fontBBX.yoff;
+
+            // Calculate where this glyph sits in the overall font height
+            // BDF uses baseline at y=0, with yoff indicating vertical position
+            // We need to convert to top-down coordinate system
+            const baselineY = fontBBX.height + fontBBX.yoff; // Baseline position from top
+            const glyphTopY = baselineY - (yoff + glyphHeight); // Where glyph starts
+
+            // Convert hex bitmap to binary, positioned correctly
+            const bmpSize = Math.ceil((width * fontHeight) / 8);
+            const bitmap = new Uint8Array(bmpSize);
+
+            let bitIdx = 0;
+            for (let y = 0; y < fontHeight; y++) {
+                // Check if this row is within the glyph's vertical range
+                const glyphY = y - glyphTopY;
+                let hexLine = '';
+
+                if (glyphY >= 0 && glyphY < g.bitmap.length) {
+                    hexLine = g.bitmap[glyphY];
+                }
+
+                // Convert hex to binary
+                const bytesNeeded = Math.ceil(width / 8);
+                const paddedHex = hexLine.padEnd(bytesNeeded * 2, '0');
+
+                for (let x = 0; x < width; x++) {
+                    const hexByteIdx = Math.floor(x / 8) * 2;
+                    const hexByte = paddedHex.substring(hexByteIdx, hexByteIdx + 2); // TODO: is this correct?
+                    const byte = parseInt(hexByte, 16) || 0;
+                    const bitPos = 7 - (x % 8);
+                    const bit = (byte >> bitPos) & 1;
+
+                    if (bit) {
+                        const bytePos = Math.floor(bitIdx / 8);
+                        const bitPos = 7 - (bitIdx % 8);
+                        bitmap[bytePos] |= (1 << bitPos);
+                    }
+                    bitIdx++;
+                }
+            }
+
+            // Store with original Unicode encoding
+            bdfGlyphMap.set(g.encoding, {
+                width: width,
+                bitmap: bitmap
+            });
+        }
+
+        // Analyze glyph encodings to determine initial settings
+        let minEncoding = 256;
+        let maxEncoding = 0;
+
+        for (let g of glyphs) {
+            if (g.encoding < minEncoding) minEncoding = g.encoding;
+            if (g.encoding > maxEncoding) maxEncoding = g.encoding;
+        }
+
+        // Set up font object
+        font.h = fontHeight;
+        font.first = el.firstChar.value > minEncoding ? el.firstChar.value : minEncoding;
+        font.last = el.lastChar.value < maxEncoding ? el.lastChar.value : maxEncoding;
+
+        // Update UI
+        fontName = file.name.replace(/\.[^.]+$/, '');
+        el.height.value = fontHeight;
+
+        // Update character range inputs
+        el.firstChar.value = font.first;
+        el.lastChar.value = font.last;
+        el.extension.value = "0"; // reset to no extension
+
+        // remap glyphs with the initial settings
+        remapBDFGlyphs();
+        el.glyphLabel.textContent = `Generated Glyphs (${font.first}-${font.last})`;
+
+        disabledGlyphs.clear();
+        calcSize();
+        renderGrid();
+        updatePixel();
+        el.dlBtn.disabled = false;
+        setPixelFontMode(true);
+        customFontLoaded = true; // Prevent reprocessing
+    }
+
+
+// ===================== GLYPH EDITOR =====================
+    function openGlyphEditor(idx) {
+        editingIdx = idx;
+        const w = font.w[idx], h = font.h;
+        // Extract bits into a simple flat array of 1s and 0s
+        editingBmp = [];
+        const oldBmp = font.bmp[idx];
+        for (let i = 0; i < w * h; i++) {
+            const byte = i >> 3, pos = 7 - (i & 7);
+            editingBmp.push((oldBmp[byte] >> pos) & 1);
+        }
+        const grid = $('editorGrid');
+        grid.innerHTML = '';
+        const pixelSize = Math.floor(380 / Math.max(w, h));
+        grid.style.gridTemplateColumns = `repeat(${w}, ${pixelSize}px)`;
+
+        let dragging = false, draggedPixels = new Set(), paintMode = false;
+
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const pixel = document.createElement('div');
+                pixel.className = 'editor-pixel';
+                if (editingBmp[y * w + x]) pixel.classList.add('on');
+
+                pixel.onpointerdown = (e) => {
+                    dragging = true; draggedPixels.clear();
+                    paintMode = !pixel.classList.contains('on');
+                    setPixel(pixel, x, y, w, paintMode);
+                    draggedPixels.add(`${x},${y}`);
+                    e.preventDefault();
+                };
+                pixel.onpointerenter = () => {
+                    if (dragging && !draggedPixels.has(`${x},${y}`)) {
+                        setPixel(pixel, x, y, w, paintMode);
+                        draggedPixels.add(`${x},${y}`);
+                    }
+                };
+                grid.appendChild(pixel);
+            }
+        }
+        document.onpointerup = () => dragging = false;
+        $('glyphEditor').classList.add('active');
+    }
+
+
+    function setPixel(pixel, x, y, w, turnOn) {
+        editingBmp[y * w + x] = turnOn ? 1 : 0;
+        turnOn ? pixel.classList.add('on') : pixel.classList.remove('on');
+    }
+
+    function saveGlyphEdit() {
+        const oldW = font.w[editingIdx], h = font.h;
+
+        // 1. Find the new actual content width
+        let newW = 0;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < oldW; x++) {
+                if (editingBmp[y * oldW + x]) newW = Math.max(newW, x + 1);
+            }
+        }
+        if (newW === 0) newW = 1; // Fallback for empty glyphs
+
+        // 2. Extract bits into a new array based on the NEW width
+        const finalBits = [];
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < newW; x++) {
+                finalBits.push(editingBmp[y * oldW + x]);
+            }
+        }
+
+        // 3. Save and re-pack
+        font.w[editingIdx] = newW;
+        font.bmp[editingIdx] = packBits(finalBits, newW, h);
+
+        recalculateFontDimensions();
+        closeGlyphEditor();
+        calcSize();
+        renderGrid();
+        updatePixel();
+    }
+
+    function closeGlyphEditor() {
+        document.onpointerup = null;
+        $('glyphEditor').classList.remove('active');
+        document.querySelectorAll('.glyph').forEach(g => {
+            g.classList.remove('edit-mode');
+        });
+        editingIdx = -1;
+    }
+</script>
+</body>
+</html>

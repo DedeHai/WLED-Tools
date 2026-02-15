@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WLED Font Showcase Tool</title>
+    <style>
+        *{box-sizing:border-box;margin:0}
+        body{
+            font-family:system-ui,sans-serif;
+            background:#0a0a0a;
+            color:#e0e0e0;
+            padding:20px;
+            min-height:100vh;
+        }
+        .card{
+            max-width:900px;
+            margin:auto;
+            background:#16213e;
+            padding:30px;
+            border-radius:12px;
+            box-shadow:0 4px 20px rgba(0,242,255,.15);
+            border:1px solid rgba(0,242,255,.1);
+        }
+        h1 {
+            color: #00f2ff;
+            text-align:center;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            text-shadow: 0 0 20px #ffffff;
+            padding-bottom: 12px;
+            font-weight: 800;
+            letter-spacing: 2px;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            background: rgba(255,255,255,.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0,242,255,.2);
+        }
+        .summary-item label {
+            display: block;
+            font-size: 0.65rem;
+            color: #00d4ff;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .summary-item span {
+            font-family: monospace;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+        .controls{
+            display:grid;
+            grid-template-columns: 1fr 1fr;
+            gap:15px;
+            margin-bottom:20px;
+        }
+        label{
+            display:block;
+            font-size:.7rem;
+            font-weight:600;
+            color:#00d4ff;
+            margin-bottom:6px;
+            text-transform:uppercase;
+        }
+        input[type="file"]{
+            display:none;
+        }
+        .file-label{
+            display:block;
+            width:100%;
+            padding:11px;
+            border-radius:8px;
+            border:1px solid rgba(0,242,255,.2);
+            background:rgba(0,0,0,.4);
+            color:#888;
+            cursor:pointer;
+            text-align:center;
+            transition:all .3s;
+        }
+        .file-label:hover{
+            border-color:#00f2ff;
+            color:#00f2ff;
+        }
+        .file-label.has-file{
+            color:#00f2ff;
+        }
+        input, textarea, button{
+            width:100%;
+            padding:10px;
+            border-radius:8px;
+            border:1px solid rgba(0,242,255,.2);
+            background:rgba(0,0,0,.4);
+            color:#fff;
+            transition:all .3s;
+        }
+        textarea { height: 80px; resize: vertical; font-family: inherit; }
+        input:focus, textarea:focus {outline:none; border-color:#00f2ff;}
+        button{
+            cursor:pointer;
+            font-weight:bold;
+            background:linear-gradient(135deg,#f093fc 0%,#f5576c 100%);
+            box-shadow:0 0 14px rgba(245,87,108,.4);
+            border:none;
+            margin-top:10px;
+        }
+        button:hover:not(:disabled){
+            transform:translateY(-2px);
+            box-shadow:0 0 18px rgba(245,87,108,.7);
+        }
+        button:disabled{opacity:0.3; cursor:not-allowed;}
+        .preview-area{
+            background:rgba(0,0,0,.6);
+            padding:20px;
+            border-radius:10px;
+            margin-bottom:20px;
+            border:1px solid rgba(0,242,255,.2);
+        }
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+            background: #000;
+            margin: auto;
+        }
+        #glyphGrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0,0,0,.3);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .glyph-cell {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(0,242,255,0.1);
+            padding: 5px;
+            text-align: center;
+            border-radius: 4px;
+        }
+        .glyph-label { font-size: 0.6rem; color: #00d4ff; margin-top: 4px; font-family: monospace; }
+    </style>
+</head>
+<body>
+<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.9 Beta</div>
+<div class="card">
+    <h1>WLED Font Factory<br>WBF Showcase Generator</h1>
+
+    <div class="controls">
+        <div>
+            <label>Load WBF Font</label>
+            <input type="file" id="fontFile" accept=".wbf">
+            <label for="fontFile" class="file-label" id="fileLabel">Load Font</label>
+        </div>
+        <div>
+            <label>License of Source Font (required!)</label>
+            <input type="text" id="licenseInput" placeholder="e.g. CC-BY-NC for personal use only" required>
+        </div>
+    </div>
+
+    <div class="summary-grid" id="headerSummary">
+        <div class="summary-item"><label>Height</label><span id="h_val">-</span></div>
+        <div class="summary-item"><label>Max Width</label><span id="w_val">-</span></div>
+        <div class="summary-item"><label>Spacing</label><span id="s_val">-</span></div>
+        <div class="summary-item"><label>Range</label><span id="r_val">-</span></div>
+    </div>
+
+    <div class="preview-area">
+        <label>Live Sample Preview</label>
+        <input type="text" id="sampleInput" value="WLED Font Factory 123!" style="margin-bottom:10px">
+        <canvas id="liveCanvas"></canvas>
+    </div>
+
+    <div class="preview-area">
+        <label>Glyph Inventory</label>
+        <div id="glyphGrid"></div>
+    </div>
+
+    <div style="margin-top:10px">
+        <label>Showcase Notes</label>
+        <textarea id="noteInput" placeholder="Describe how this font was created, its intended usecase, specialties, a link to the original font used... This text will be in the PNG."></textarea>
+        
+        <label style="margin-top:10px">Export Filename</label>
+        <input type="text" id="exportName" placeholder="font_preview.png" style="margin-bottom:10px">
+        
+        <button id="exportBtn" disabled>GENERATE & DOWNLOAD SHOWCASE PNG</button>
+    </div>
+	<div style="text-align:center;font-size:12px;color:#666;"><br>WLED Font Factory by @dedehai | github.com/DedeHai/WLED-Tools</div>
+</div>
+
+<script>
+    const $ = id => document.getElementById(id);
+    const SCALE = 4;
+    let font = { h: 0, w: [], bmp: [], first: 0, last: 0, offset: 0, name: "" };
+
+    $('fontFile').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const fileLabel = document.getElementById('fileLabel');
+        fileLabel.textContent = file.name;
+        fileLabel.classList.add('has-file');
+        
+        const data = new Uint8Array(await file.arrayBuffer());
+        if (data[0] !== 0x57) return alert("Invalid WBF Magic Byte");
+
+        font.name = file.name.replace('.wbf','');
+        font.h = data[1];
+        font.first = data[5];
+        font.last = data[6];
+        font.offset = data[8] | (data[9] << 8) | (data[10] << 16) | (data[11] << 24);
+        
+        const cnt = font.last - font.first + 1;
+        const widths = Array.from(data.slice(12, 12 + cnt));
+        
+        let ptr = 12 + cnt;
+        font.bmp = new Array(256).fill(null).map(() => new Uint8Array(0));
+        font.w = new Array(256).fill(0);
+        
+        let maxW = 0;
+        for (let i = 0; i < cnt; i++) {
+            const w = widths[i];
+            const idx = font.first + i;
+            font.w[idx] = w;
+            if (w > maxW) maxW = w;
+            const bSize = Math.ceil((w * font.h) / 8);
+            font.bmp[idx] = data.slice(ptr, ptr + bSize);
+            ptr += bSize;
+        }
+
+        $('h_val').textContent = font.h + "px";
+        $('w_val').textContent = maxW + "px";
+        $('s_val').textContent = data[3] + "px";
+        $('r_val').textContent = `${font.first}-${font.last}`;
+        $('exportName').value = font.name + "_showcase.png";
+        
+        renderGlyphTable();
+        updateLivePreview();
+        toggleBtn();
+    });
+
+    $('licenseInput').addEventListener('input', toggleBtn);
+    function toggleBtn() {
+        $('exportBtn').disabled = !($('fontFile').files.length > 0 && $('licenseInput').value.trim().length > 0);
+    }
+
+    $('sampleInput').addEventListener('input', updateLivePreview);
+
+    function getIndexForChar(code) {
+        if (code <= 127) return code;
+        if (font.offset > 0) {
+            let rel = code - font.offset;
+            let idx = 128 + rel;
+            return (idx >= 128 && idx <= 255) ? idx : -1;
+        }
+        return (code <= 255) ? code : -1;
+    }
+
+    function drawGlyphToCtx(ctx, idx, xBase, yBase, scale, color="#00f2ff") {
+        const w = font.w[idx];
+        const h = font.h;
+        const bits = font.bmp[idx];
+        if (!bits || w === 0) return w;
+        ctx.fillStyle = color;
+        let bitIdx = 0;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const bytePos = Math.floor(bitIdx / 8);
+                const bitPos = 7 - (bitIdx % 8);
+                if (bytePos < bits.length && (bits[bytePos] >> bitPos) & 1) {
+                    ctx.fillRect(xBase + (x * scale), yBase + (y * scale), scale - 1, scale - 1);
+                }
+                bitIdx++;
+            }
+        }
+        return w;
+    }
+
+    function renderGlyphTable() {
+        const grid = $('glyphGrid'); grid.innerHTML = "";
+        for (let i = font.first; i <= font.last; i++) {
+            if (font.w[i] === 0) continue;
+            const container = document.createElement('div');
+            container.className = "glyph-cell";
+            const cvs = document.createElement('canvas');
+            cvs.width = font.w[i] * 2; cvs.height = font.h * 2;
+            drawGlyphToCtx(cvs.getContext('2d'), i, 0, 0, 2);
+            const label = document.createElement('div');
+            label.className = "glyph-label";
+            const char = (i < 33) ? "#"+i : String.fromCodePoint(i >= 128 && font.offset > 0 ? font.offset + (i-128) : i);
+            label.textContent = char;
+            container.appendChild(cvs); container.appendChild(label);
+            grid.appendChild(container);
+        }
+    }
+
+    function updateLivePreview() {
+        const txt = $('sampleInput').value;
+        const ctx = $('liveCanvas').getContext('2d');
+        let totalW = 0;
+        for (let char of txt) {
+            const idx = getIndexForChar(char.codePointAt(0));
+            if (idx !== -1) totalW += font.w[idx] + 1;
+        }
+        $('liveCanvas').width = Math.max(totalW * SCALE, 100);
+        $('liveCanvas').height = font.h * SCALE;
+        ctx.fillStyle = "black"; ctx.fillRect(0,0, $('liveCanvas').width, $('liveCanvas').height);
+        let xOff = 0;
+        for (let char of txt) {
+            const idx = getIndexForChar(char.codePointAt(0));
+            if (idx !== -1) { xOff += drawGlyphToCtx(ctx, idx, xOff * SCALE, 0, SCALE) + 1; }
+        }
+    }
+
+    // Helper for multi-line wrapping in Canvas
+    function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+        const words = text.split(' ');
+        let line = '';
+        let currentY = y;
+        for(let n = 0; n < words.length; n++) {
+            let testLine = line + words[n] + ' ';
+            let metrics = ctx.measureText(testLine);
+            if (metrics.width > maxWidth && n > 0) {
+                ctx.fillText(line, x, currentY);
+                line = words[n] + ' ';
+                currentY += lineHeight;
+            } else { line = testLine; }
+        }
+        ctx.fillText(line, x, currentY);
+        return currentY;
+    }
+
+    $('exportBtn').addEventListener('click', () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const padding = 40;
+        const charSpacing = 3;
+        const glyphsPerRow = 16;
+        
+        const activeGlyphs = [];
+        for(let i=font.first; i<=font.last; i++) if(font.w[i] > 0) activeGlyphs.push(i);
+        const rows = Math.ceil(activeGlyphs.length / glyphsPerRow);
+        const tableW = (glyphsPerRow * (parseInt($('w_val').textContent) + charSpacing)) * SCALE;
+        const tableH = (rows * (font.h + charSpacing)) * SCALE;
+        
+        canvas.width = Math.max(tableW + (padding * 2), 700);
+        // Estimate initial height
+        canvas.height = tableH + (font.h * SCALE * 5) + 500; 
+
+        ctx.fillStyle = "#0a0a0a"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Header Title
+        ctx.fillStyle = "#00d4ff"; ctx.font = "bold 24px system-ui";
+        ctx.fillText(font.name.toUpperCase(), padding, 60);
+        
+        ctx.fillStyle = "#e0e0e0"; ctx.font = "16px monospace";
+        const meta = `HEIGHT: ${font.h}px | MAX-WIDTH: ${$('w_val').textContent} | RANGE: ${font.first}-${font.last}`;
+        ctx.fillText(meta, padding, 90);
+        
+        ctx.fillStyle = "#00d4ff";
+        ctx.fillText(`FONT LICENSE: ${$('licenseInput').value}`, padding, 115);
+
+        // Notes Wrapping
+        ctx.fillStyle = "#bbbbbb"; ctx.font = "14px system-ui";
+        const lastNoteY = wrapText(ctx, $('noteInput').value, padding, 150, canvas.width * 0.7, 20);
+
+        // Live Preview Section
+        let xPtr = padding;
+        const sampleTxt = $('sampleInput').value;
+        for (let char of sampleTxt) {
+            const idx = getIndexForChar(char.codePointAt(0));
+            if (idx !== -1) { xPtr += (drawGlyphToCtx(ctx, idx, xPtr, lastNoteY + 20, SCALE, "#ffffff") + 1) * SCALE; }
+        }
+
+        // Glyph Table Section
+        let tableTitleY = lastNoteY + (font.h * SCALE) + 20;
+        let ty = tableTitleY + 30;
+        let tx = padding;
+        activeGlyphs.forEach((gIdx, count) => {
+            drawGlyphToCtx(ctx, gIdx, tx, ty, SCALE, "#00f2ff");
+            tx += (parseInt($('w_val').textContent) + charSpacing) * SCALE;
+            if ((count + 1) % glyphsPerRow === 0) { tx = padding; ty += (font.h + charSpacing) * SCALE; }
+        });
+
+        // Final Footer Credit
+        let footerY = ty + (font.h + charSpacing) * SCALE + 30;
+        ctx.fillStyle = "#444"; ctx.font = "12px monospace";
+        ctx.fillText("WLED Font Factory by @dedehai | github.com/DedeHai/WLED-Tools", padding, footerY);
+
+        // Trim canvas height to actual content
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = canvas.width;
+        finalCanvas.height = footerY + padding;
+        const finalCtx = finalCanvas.getContext('2d');
+        finalCtx.drawImage(canvas, 0, 0);
+
+        const link = document.createElement('a');
+        link.download = $('exportName').value;
+        link.href = finalCanvas.toDataURL("image/png");
+        link.click();
+    });
+</script>
+</body>
+</html>
