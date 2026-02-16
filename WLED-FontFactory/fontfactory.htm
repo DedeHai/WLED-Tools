@@ -252,7 +252,7 @@
             padding:6px 12px;
             font-size:0.75rem;
             margin-top:8px;
-            max-width:50%;
+            max-width:60%;
         }
         .editor-grid{
             display:inline-grid;
@@ -271,11 +271,15 @@
         .editor-pixel.on{
             background:#00f2ff;
         }
-     
+        /* Custom scrollbars*/
+        ::-webkit-scrollbar{width:8px;height:8px}
+        ::-webkit-scrollbar-track{background:rgba(0,0,0,.4)}
+        ::-webkit-scrollbar-thumb{background:rgba(0,242,255,.3);border-radius:4px}
+        ::-webkit-scrollbar-thumb:hover{background:rgba(0,242,255,.5)}
     </style>
 </head>
 <body>
-<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.9 Beta</div>
+<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.95 Beta</div>
 <div class="card">
     <h1>WLED Font Factory</h1>
     <div class="controls">
@@ -646,10 +650,9 @@
         let maxW = 0;
         let minY = font.h;
         let maxY = 0;
-
-        for (let i = 0; i < 256; i++) {
-            if (font.w[i] > maxW)
-                maxW = font.w[i];
+        // Find vertical bounds across all glyphs in range
+        for (let i = font.first; i <= font.last; i++) {
+            if (disabledGlyphs.has(i)) continue;
             for (let bit = 0; bit < font.w[i] * font.h; bit++) {
                 if (font.bmp[i][bit >> 3] & (1 << (7 - (bit & 7)))) {
                     const y = Math.floor(bit / font.w[i]);
@@ -658,24 +661,53 @@
                 }
             }
         }
-
+        // If no content found anywhere, set minimal height
+        if (maxY < minY) {
+            minY = 0;
+            maxY = 0;
+        }
         const newH = maxY - minY + 1;
-        if (newH < font.h && maxY >= minY) {
-            for (let i = 0; i < 256; i++) {
-                if (font.w[i] === 0) continue;
-                const w = font.w[i];
-                const newBmp = new Uint8Array(Math.ceil(w * newH / 8));
-                for (let bit = 0; bit < w * newH; bit++) {
-                    const oldBit = (Math.floor(bit / w) + minY) * w + (bit % w);
-                    if (font.bmp[i][oldBit >> 3] & (1 << (7 - (oldBit & 7)))) {
-                        newBmp[bit >> 3] |= 1 << (7 - (bit & 7));
+        // Trim each glyph vertically AND horizontally
+        for (let i = font.first; i <= font.last; i++) {
+            if (disabledGlyphs.has(i)) continue;
+            if (font.w[i] === 0) continue;
+            const oldW = font.w[i];
+            // Find horizontal bounds for this glyph
+            let minX = oldW;
+            let maxX = -1;
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = 0; x < oldW; x++) {
+                    const bit = y * oldW + x;
+                    if (font.bmp[i][bit >> 3] & (1 << (7 - (bit & 7)))) {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
                     }
                 }
-                font.bmp[i] = newBmp;
             }
-            font.h = newH;
+            // Skip empty glyphs (no pixels) - leave them as width 0
+            if (maxX === -1) continue;
+            const newW = maxX - minX + 1;
+            const newBmp = new Uint8Array(Math.ceil(newW * newH / 8));
+            // Copy trimmed bits (both horizontal and vertical)
+            for (let y = 0; y < newH; y++) {
+                for (let x = 0; x < newW; x++) {
+                    const oldBit = (y + minY) * oldW + (x + minX);
+                    if (font.bmp[i][oldBit >> 3] & (1 << (7 - (oldBit & 7)))) {
+                        const newBit = y * newW + x;
+                        newBmp[newBit >> 3] |= 1 << (7 - (newBit & 7));
+                    }
+                }
+            }
+            font.w[i] = newW;
+            font.bmp[i] = newBmp;
+            if (newW > maxW) maxW = newW;
         }
-
+        font.h = newH;
+        // Special handling for space character (32) - give it proper width based on font height
+        if (font.first <= 32 && font.last >= 32) {
+            font.w[32] = Math.ceil(font.h / 4) > maxW ? maxW : Math.ceil(font.h / 4); // Set space width to 1/4 of font height or maxW, whichever is smaller
+            font.bmp[32] = new Uint8Array(Math.ceil((font.w[32] * font.h) / 8));
+        }
         el.maxWidth.value = maxW;
         el.height.value = font.h;
     }
@@ -742,93 +774,39 @@
             rawGlyphs.push({ width: w, height: h, imgData });
         }
 
-        // Step 2: Find overall vertical bounds using threshold
-        let globalMinY = font.h;
-        let globalMaxY = 0;
-        let hasAnyContent = false;
-
-        for (let glyphData of rawGlyphs) {
-            if (!glyphData) continue;
-
-            const { width, height, imgData } = glyphData;
-
-            // Sample and threshold each pixel to find bounds
-            for (let y = 0; y < height; y++) {
-                let rowHasContent = false;
-                for (let x = 0; x < width; x++) {
-                    // Sample the center of each logical pixel
-                    if (samplePixel(imgData, x, y, sample, thresh)) {
-                        rowHasContent = true;
-                        hasAnyContent = true;
-                        break;
-                    }
-                }
-
-                if (rowHasContent) {
-                    if (y < globalMinY) globalMinY = y;
-                    if (y > globalMaxY) globalMaxY = y;
-                }
-            }
-        }
-
-        // Trim empty rows if found
-        if (hasAnyContent && (globalMinY > 0 || globalMaxY < font.h - 1)) {
-            font.h = globalMaxY - globalMinY + 1;
-        }
-
-        // Step 3: Process each glyph with known height and threshold
+        // Step 2: Process each glyph - just sample and store full bitmap
         for (let i = 0; i < rawGlyphs.length; i++) {
             const glyphIdx = first + i;
             const glyphData = rawGlyphs[i];
             if (!glyphData) continue;
 
             const { width, height, imgData } = glyphData;
-
-            // 1. Find the actual content bounds for THIS glyph
-            let minX = width;
-            let maxX = -1;
-            const tempBits = [];
-
-            // First pass: sample everything and find min/max X
-            for (let y = globalMinY; y <= globalMaxY; y++) {
+            // Sample all pixels without trimming
+            const packedBits = [];
+            let hasContent = false;
+            for (let y = 0; y < font.h; y++) {
                 for (let x = 0; x < width; x++) {
                     const isPixel = samplePixel(imgData, x, y, sample, thresh);
-                    if (isPixel) {
-                        if (x < minX) minX = x;
-                        if (x > maxX) maxX = x;
-                    }
+                    packedBits.push(isPixel ? 1 : 0);
+                    if (isPixel) hasContent = true;
                 }
             }
 
-            // Handle empty/space characters
-            if (maxX === -1) {
-                // It's a space. Use a default width (e.g., 1/3 of height)
-                font.w[glyphIdx] = Math.ceil(font.h / 3);
-                font.bmp[glyphIdx] = new Uint8Array(Math.ceil((font.w[glyphIdx] * font.h) / 8));
+            // Handle empty characters (space gets added width later, others become width 0)
+            if (!hasContent) {
+                font.w[glyphIdx] = 0;
+                font.bmp[glyphIdx] = new Uint8Array(0); // empty bitmap
                 continue;
             }
 
-            // 2. Extract only the useful columns
-            const trimmedWidth = maxX - minX + 1;
-            const packedBits = [];
-
-            for (let y = globalMinY; y <= globalMaxY; y++) {
-                for (let x = minX; x <= maxX; x++) {
-                    packedBits.push(samplePixel(imgData, x, y, sample, thresh) ? 1 : 0);
-                }
-            }
-
-            font.w[glyphIdx] = trimmedWidth;
-            font.bmp[glyphIdx] = packBits(packedBits, trimmedWidth, font.h);
+            font.w[glyphIdx] = width;
+            font.bmp[glyphIdx] = packBits(packedBits, width, font.h);
         }
+        // Trim blank rows/columns across all glyphs
+        recalculateFontDimensions();
 
         // Update UI
         el.height.value = font.h;
-        let maxW = 0;
-        for (let i = font.first; i <= font.last; i++) {
-            if (!disabledGlyphs.has(i) && font.w[i] > maxW) maxW = font.w[i];
-        }
-        el.maxWidth.value = maxW;
 
         const offsetStr = utf8Offset > 0 ? ` + UTF-8 0x${utf8Offset.toString(16).toUpperCase()}` : '';
         el.glyphLabel.textContent = `Generated Glyphs (${first}-${last}${offsetStr})`;
@@ -923,6 +901,7 @@
                 } else {
                     disabledGlyphs.add(i);
                 }
+                recalculateFontDimensions();
                 calcSize();
                 renderGrid();
                 updatePixel();
@@ -1258,7 +1237,6 @@
             if (line.startsWith('DEFAULT_CHAR')) {
                 defaultChar = parseInt(line.split(/\s+/)[1]);
             }
-            
             if (line.startsWith('STARTCHAR')) {
                 currentGlyph = {
                     name: line.substring(10).trim(),
@@ -1267,13 +1245,11 @@
                     bbx: null
                 };
             }
-            
             if (line.startsWith('ENCODING')) {
                 if (currentGlyph) {
                     currentGlyph.encoding = parseInt(line.split(/\s+/)[1]);
                 }
             }
-            
             if (line.startsWith('BBX')) {
                 if (currentGlyph) {
                     const parts = line.split(/\s+/);
@@ -1285,12 +1261,10 @@
                     };
                 }
             }
-            
             if (line.startsWith('BITMAP')) {
                 inBitmap = true;
                 continue;
             }
-            
             if (line.startsWith('ENDCHAR')) {
                 if (currentGlyph && currentGlyph.encoding >= 0) {
                     glyphs.push(currentGlyph);
@@ -1298,20 +1272,16 @@
                 currentGlyph = null;
                 inBitmap = false;
             }
-            
             if (inBitmap && currentGlyph && line.length > 0 && !line.startsWith('ENDCHAR')) {
                 currentGlyph.bitmap.push(line);
             }
         }
-        
         if (glyphs.length === 0) {
             alert('No glyphs found in BDF file');
             return;
         }
-        
         // Clear and populate bdfGlyphMap with original Unicode -> bitmap mapping
         bdfGlyphMap.clear();
-        
         for (let g of glyphs) {
             const width = g.bbx ? g.bbx.width : fontBBX.width;
             const glyphHeight = g.bbx ? g.bbx.height : fontBBX.height;
@@ -1389,6 +1359,7 @@
 
         // remap glyphs with the initial settings
         remapBDFGlyphs();
+        recalculateFontDimensions(); // trim down and remove empty rows/columns
         el.glyphLabel.textContent = `Generated Glyphs (${font.first}-${font.last})`;
 
         disabledGlyphs.clear();
@@ -1476,6 +1447,7 @@
         font.bmp[editingIdx] = packBits(finalBits, newW, h);
 
         recalculateFontDimensions();
+        setPixelFontMode(true); // hide controls and ttf preview as this is now a custom edit
         closeGlyphEditor();
         calcSize();
         renderGrid();
