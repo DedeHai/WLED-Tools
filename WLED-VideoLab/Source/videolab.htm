@@ -360,7 +360,7 @@ input[type="color"] {
 </style>
 </head>
 <body>
-<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.91beta</div>
+<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.92beta</div>
 <div class="cont">
 	<div class="title">WLED <span class="rb">VideoLab</span></div>
 
@@ -374,13 +374,10 @@ input[type="color"] {
 	<input type="file" id="file" accept="video/*">
 
 	<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-		<div style="flex-basis:100%;">Play from CORS enabled URL: </div>
+		<div style="flex-basis:100%;">Play from CORS enabled URL (like pixabay.com):</div>
 		<input type="text" id="url">
 		<button class="sml" id="loadU" title="Play URL">▶</button>
 	</div>
-  <h5>
-    Example: https://cdn.pixabay.com/video/2023/01/08/145766-787427612_tiny.mp4
-  </h5>
 	<div class="presets" id="prests" style="display:none;">
 		<h3>Saved Video Presets</h3>
 		<div id="plist"></div>
@@ -646,7 +643,7 @@ function handleFile(){
 	stopVid();
 	const url = URL.createObjectURL(f);
 	vid.src = url; vid.load();
-	vid.addEventListener('loadedmetadata', ()=>startCap(f.name,false), {once:true});
+	vid.addEventListener('loadedmetadata', ()=>startCap(false), {once:true});
 	vid.play().catch(e=>{
 		msg('Failed to load: '+e.message,'error');
 		URL.revokeObjectURL(url);
@@ -665,7 +662,7 @@ function loadUrl(url){
 			stopVid();
 			vid.src = url; vid.load();
 			const onM = ()=>{
-				startCap(url.split('/').pop(), true);
+				startCap(true);
 				res();
 			};
 			vid.addEventListener('loadedmetadata', onM, {once:true});
@@ -693,7 +690,7 @@ function stopVid(){
   gId('editor').classList.remove('active');
 }
 // --- Start capture ---
-function startCap(){
+function startCap(isUrl){
 	gId('editor').classList.add('active');
 
 	const asp = vid.videoHeight / vid.videoWidth;
@@ -718,7 +715,7 @@ function startCap(){
 	capFrame();
 
 	gId('vctrl').style.display = 'flex';
-	gId('saveP').style.display = 'inline-block';
+	gId('saveP').style.display = isUrl ? 'inline-block' : 'none';
 	gId('expGif').style.display = 'inline-block';
 
 	if(vid.duration && !isNaN(vid.duration)){
@@ -1380,57 +1377,93 @@ gId('gifCn').onclick = () => {
 	gId('resDlg').classList.remove('active');
 };
 
+// GIF export helpers
+async function seekTo(t) {
+    vid.currentTime = t;
+    return await new Promise((res) => {
+        const timeout = setTimeout(() => { vid.removeEventListener('seeked', onSeek); res(false); }, 500);
+        const onSeek = () => { clearTimeout(timeout); vid.removeEventListener('seeked', onSeek); res(true); };
+        vid.addEventListener('seeked', onSeek);
+    });
+}
+
+async function capGifFrame(tctx, mw, mh) {
+    const cx = (crop.x - vRect.x) / vRect.w * vid.videoWidth;
+    const cy = (crop.y - vRect.y) / vRect.h * vid.videoHeight;
+    const cw = crop.w / vRect.w * vid.videoWidth;
+    const ch = crop.h / vRect.h * vid.videoHeight;
+    tctx.fillStyle = gId('bg').value;
+    tctx.fillRect(0, 0, mw, mh);
+    tctx.drawImage(vid, cx, cy, cw, ch, 0, 0, mw, mh);
+    const fd = tctx.getImageData(0, 0, mw, mh);
+    applyFilt(fd, false);
+    return new Uint8ClampedArray(fd.data);
+}
+
 async function expGif(nm, fps, maxCols) {
 	const spd = vid.playbackRate || 1;
 	const useLoop = (typeof lStart === 'number' && lEnd && lEnd > lStart + 0.001);
 	const tStart = useLoop ? lStart : 0;
 	const tEnd = useLoop ? lEnd : vid.duration;
 	const tStep = spd / fps;
-
 	const tc = document.createElement('canvas');
 	tc.width = mw; tc.height = mh;
 	const tctx = tc.getContext('2d', { willReadFrequently: true });
 	tctx.imageSmoothingEnabled = false;
-
 	const savT = vid.currentTime;
 	const wasPause = vid.paused;
-
 	const frames = [];
 	const dlys = [];
 	let lastF = null;
 	let accD = 0;
 
-	async function capAt(t) {
-		vid.currentTime = t;
-		await new Promise((res) => {
-			const onSeek = () => { vid.removeEventListener('seeked', onSeek); res(); };
-			vid.addEventListener('seeked', onSeek);
-		});
-		const cx = (crop.x - vRect.x) / vRect.w * vid.videoWidth;
-		const cy = (crop.y - vRect.y) / vRect.h * vid.videoHeight;
-		const cw = crop.w / vRect.w * vid.videoWidth;
-		const ch = crop.h / vRect.h * vid.videoHeight;
+	let t = tStart;
+	while (t < tEnd) {
+		const seekOk = await seekTo(t);
 
-		tctx.fillStyle = gId('bg').value;
-		tctx.fillRect(0, 0, mw, mh);
-		tctx.drawImage(vid, cx, cy, cw, ch, 0, 0, mw, mh);
-		const fd = tctx.getImageData(0, 0, mw, mh);
-		applyFilt(fd, false);
-		return fd.data;
-	}
+		if (seekOk) {
+			const frm = await capGifFrame(tctx, mw, mh);
+			if (lastF && frm.every((v, i) => v === lastF[i])) {
+				accD += tStep; t += tStep;
+				continue;
+			}
+			frames.push(frm);
+			if (lastF) dlys.push(Math.max(1, Math.round(accD * 100 / spd)));
+			lastF = frm;
+			accD = tStep;
+			t += tStep;
+		} else {
+			// seek failed — step back, play and capture frames in real time (slower but some videos do not allow to seek every position and can get stuck)
+			const playFrom = Math.max(tStart, t - 1.0);
+			const playUntil = Math.min(tEnd, t + 3.0);
+			await seekTo(playFrom);
+			vid.play().catch(() => {});
 
-	for (let t = tStart; t < tEnd;) {
-		const frm = await capAt(t);
-
-		if (lastF && frm.every((v, i) => v === lastF[i])) {
-			accD += 0.01; t += 0.01;
-			continue;
-		} else { t += tStep; }
-
-		frames.push(frm);
-		if (lastF) dlys.push(Math.max(1, Math.round(accD * 100 / spd)));
-		lastF = frm;
-		accD = tStep;
+			await new Promise((resolve) => {
+				function onFrame(now, meta) {
+					const ct = meta.mediaTime;
+					if (ct >= playUntil || ct >= tEnd) {
+						vid.pause();
+						t = ct;
+						resolve();
+						return;
+					}
+					if (ct < t) {
+						vid.requestVideoFrameCallback(onFrame);
+						return;
+					}
+					capGifFrame(tctx, mw, mh).then(frm => {
+						frames.push(frm);
+						if (lastF) dlys.push(Math.max(1, Math.round((ct - (t - tStep)) * 100 / spd)));
+						lastF = frm;
+						t = ct + tStep;
+						accD = tStep;
+						vid.requestVideoFrameCallback(onFrame);
+					});
+				}
+				vid.requestVideoFrameCallback(onFrame);
+			});
+		}
 	}
 
 	if (frames.length) dlys.push(Math.max(1, Math.round(accD * 100 / spd)));
