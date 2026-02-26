@@ -40,11 +40,6 @@
             border-radius:15px;
             margin-bottom:20px;
             border:1px solid rgba(0,242,255,.1);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
         }
         .sliders{
             justify-items:center;
@@ -287,7 +282,7 @@
 <div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.95 Beta</div>
 <div class="card">
     <h1>WLED Font Factory</h1>
-    <div class="controls">
+    <div class="controls" style="position: sticky; top: 0; z-index: 100; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);">
         <div>
             <label>Font File</label>
             <input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2,.bdf,.wbf">
@@ -394,11 +389,15 @@
         <button onclick="closeGlyphEditor()">Cancel</button>
     </div>
     <button id="dlBtn" disabled>DOWNLOAD WLED BITMAP FONT (.wbf)</button>
+    <div style="text-align:center;margin:20px 0">
+		<button class="btn" onclick="window.location.href=wu">Back to Controls</button>
+	</div>
 	<div style="text-align:center;font-size:12px;color:#666;"><br>by @dedehai | github.com/DedeHai/WLED-Tools</div>
 
 </div>
 
 <script>
+    const wu = `http://${new URLSearchParams(window.location.search).get('host') || window.location.host}`;
     const $ = id => document.getElementById(id);
     const el = {
         fontFile: $('fontFile'),
@@ -514,7 +513,7 @@
         fileLabel.classList.add('has-file');
 
         const fileName = file.name.toLowerCase();
-
+        fontName = file.name.replace(/\.[^.]+$/, '');
         if (fileName.endsWith('.wbf')) {
             await loadWBF(file);
         } else if (fileName.endsWith('.bdf')) {
@@ -522,8 +521,6 @@
         } else {
             // TTF/OTF handling
             setPixelFontMode(false); // Reset to TTF mode
-            fontName = file.name.replace(/\.[^.]+$/, '');
-
             const fr = new FileReader();
             fr.onload = () => {
                 const fontFace = new FontFace(fontName, fr.result);
@@ -683,7 +680,6 @@
 
         // Pass 2: Re-pack with new dimensions
         for (let i = font.first; i <= font.last; i++) {
-            //if (disabledGlyphs.has(i)) continue;
             let lMinX = font.w[i], lMaxX = -1;
             if (font.w[i] > 0) {
                 for (let y = 0; y < font.h; y++)
@@ -693,7 +689,7 @@
             let glyphWidth;
             if (i === 32) {
                 // space char: preserve or set to reasonable width if 0
-                glyphWidth = font.w[i] > 0 ? font.w[i] : Math.max(Math.floor(targetW / 3), 2);
+                glyphWidth = isFixed ? targetW : Math.max(Math.floor(targetW / 3), 2);
                 lMinX = 0;
                 lMaxX = -1; // Force no pixels
             } else {
@@ -994,8 +990,11 @@
         el.firstChar.value = first; el.lastChar.value = last;
         el.utf8Offset.value = utf8Offset > 0 ? '0x' + utf8Offset.toString(16).toUpperCase() : '0x0000';
 
-        disabledGlyphs.clear(); normalizeFont();
-        setPixelFontMode(true); customFontLoaded = true;
+        disabledGlyphs.clear();
+        normalizeFont();
+        setPixelFontMode(true);
+        customFontLoaded = true;
+        el.dlBtn.disabled = false;
     }
 
     function remapBDFGlyphs() {
@@ -1051,6 +1050,7 @@
         }
         font.h = h; remapBDFGlyphs(); normalizeFont();
         setPixelFontMode(true); customFontLoaded = true;
+        el.dlBtn.disabled = false;
     }
 
 
