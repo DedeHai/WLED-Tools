@@ -388,10 +388,24 @@
         <button onclick="saveGlyphEdit()">Save</button>
         <button onclick="closeGlyphEditor()">Cancel</button>
     </div>
-    <button id="dlBtn" disabled>DOWNLOAD WLED BITMAP FONT (.wbf)</button>
+    <div class="card" style="margin-top:20px; border-radius:15px; background:rgba(255,255,255,0.03); padding:20px; border:1px solid rgba(0,242,255,.1); text-align:left;">
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:15px;">
+            <input type="text" id="fn" value="myfont" style="flex:1; background:#000; color:#fff; border:1px solid #333; padding:8px; border-radius:8px;" placeholder="Font name">
+            <span style="color:#00f2ff; margin-left:-5px;">.wbf</span>
+            <button class="btn" id="dlBtn" onclick="saveWBF(0)" disabled style="flex:0 0 120px; padding:10px;">Download</button>
+            <button id="upBtn" class="btn" onclick="saveWBF(1)" disabled style="display:none; flex:0 0 120px; padding:10px;">Upload</button>
+        </div>
+
+        <div id="wledFs" style="display:none; font-size:11px; border-top:1px solid #333; padding-top:10px;">
+            <div style="color:#888; margin-bottom:8px;">Fonts on device (click to delete):</div>
+            <div id="fList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+        </div>
+    </div>
+
     <div style="text-align:center;margin:20px 0">
-		<button class="btn" onclick="window.location.href=wu">Back to Controls</button>
-	</div>
+        <button class="btn" onclick="window.location.href=wu">Back to Controls</button>
+    </div>
+
 	<div style="text-align:center;font-size:12px;color:#666;"><br>by @dedehai | github.com/DedeHai/WLED-Tools</div>
 
 </div>
@@ -420,7 +434,8 @@
         fileSize: $('fileSize'),
         extension: $('extension'),
         utf8Offset: $('utf8Offset'),
-        editModeBtn: $('editModeBtn')
+        editModeBtn: $('editModeBtn'),
+        upBtn: $('upBtn')
     };
 
     const SCALE = 4;
@@ -436,7 +451,25 @@
     let editingIdx = -1;
     let editingBmp = null;
 
-    // Redundancy fix: Centralized bit getter used by all rendering/normalization logic
+    // load common.js with 3 retries (do not repeat forever to support standalone usage)
+    (function loadFiles(retry = 0) {
+        const MAX_RETRY = 3;
+
+        const s = document.createElement('script');
+        s.src = 'common.js';
+
+        s.onerror = () => {
+            console.log("common.js failed");
+            if (retry < MAX_RETRY)
+                setTimeout(() => loadFiles(retry + 1), 100);
+            else
+                scanFS(); // scan file system, sets standalone mode
+        };
+        s.onload = () => { scanFS(); } // scan file system, display fonts found
+        document.head.appendChild(s);
+    })();
+
+    // bit getter used by all rendering/normalization logic
     const getBit = (idx, x, y) => {
         const w = font.w[idx], b = font.bmp[idx];
         if (!b || x < 0 || x >= w || y < 0 || y >= font.h) return 0;
@@ -514,6 +547,7 @@
 
         const fileName = file.name.toLowerCase();
         fontName = file.name.replace(/\.[^.]+$/, '');
+        updateFileName();
         if (fileName.endsWith('.wbf')) {
             await loadWBF(file);
         } else if (fileName.endsWith('.bdf')) {
@@ -720,6 +754,7 @@
         calcSize();
         renderGrid();
         updatePixel();
+        updateFileName();
     }
 
     async function processFontAsync() {
@@ -773,7 +808,7 @@
         normalizeFont();
         if (prog) prog.style.display = 'none';
         updateTTF();
-        el.dlBtn.disabled = false;
+        el.dlBtn.disabled = el.upBtn.disabled = false;
     }
 
     // calculate file size
@@ -907,7 +942,15 @@
         }
     }
 
-    el.dlBtn.addEventListener('click', () => {
+    function updateFileName() {
+        if (!font.h) return;
+        let name = fontName + "_" + font.h + "px";
+        if (font.utf8Offset > 0) name += "_utf8_" + font.utf8Offset.toString(16);
+        const fnInput = $('fn');
+        if (fnInput) fnInput.value = name;
+    }
+
+    function getWBF() {
         const cnt = font.last - font.first + 1;
         let maxwidth = 0;
         for (let i = 0; i < cnt; i++) {
@@ -947,15 +990,52 @@
                 ptr += font.bmp[i].length;
             }
         }
+        return file;
+    }
 
-        const blob = new Blob([file], { type: 'application/octet-stream' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        let filename = `${fontName}_${font.h}px`;
-        if (font.utf8Offset > 0) filename += `_utf8_${font.utf8Offset.toString(16)}`;
-        a.download = `${filename}.wbf`;
-        a.click();
-    });
+    async function saveWBF(upload) {
+        let fn = ($('fn').value || 'font');
+        if (!fn.toLowerCase().endsWith('.wbf')) fn += '.wbf';
+        const data = getWBF();
+        if (upload) {
+            const fd = new FormData();
+            fd.append("data", new Blob([data]), fn);
+            const res = await fetch(getURL('/upload'),{method:'POST', body: fd });
+            alert(res.ok ? "Uploaded" : "Upload failed");
+            scanFS(); // refresh font list
+        } else {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([data]));
+            a.download = fn;
+            a.click();
+        }
+    }
+
+    // scan file system for existing WBF files and populate list
+    async function scanFS() {
+        try {
+            const res = await fetch(getURL('/edit?list=/'));
+            if (!res.ok) return;
+            const files = await res.json();
+            const wbf = files.filter(f => f.name.endsWith('.wbf'));
+            $('fList').innerHTML = wbf.map(f => 
+                `<span style="cursor:pointer; text-decoration:underline; margin-right:12px; color:#8cf" 
+                onclick="del('${f.name}')">${f.name}</span>`
+            ).join('') || 'None';
+            $('upBtn').style.display = 'inline-block';
+            $('wledFs').style.display = 'block';
+        } catch (e) {}
+    }
+
+    // delete file
+    async function del(name){
+        if(!confirm(`Delete ${name}?`))return;
+        try{
+            const r = await fetch(getURL(`/edit?func=delete&path=/${name}`));
+            alert(r.ok ? "Deleted" : "Delete failed! File in use?");
+            scanFS(); // refresh file list
+        }catch(e){console.log(e);}
+    }
 
     function setPixelFontMode(enabled) {
         pixelFontMode = enabled;
@@ -994,7 +1074,8 @@
         normalizeFont();
         setPixelFontMode(true);
         customFontLoaded = true;
-        el.dlBtn.disabled = false;
+        el.dlBtn.disabled = el.upBtn.disabled = false;
+        updateFileName();
     }
 
     function remapBDFGlyphs() {
@@ -1050,7 +1131,8 @@
         }
         font.h = h; remapBDFGlyphs(); normalizeFont();
         setPixelFontMode(true); customFontLoaded = true;
-        el.dlBtn.disabled = false;
+        el.dlBtn.disabled = el.upBtn.disabled = false;
+        updateFileName();
     }
 
 
