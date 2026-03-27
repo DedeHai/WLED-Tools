@@ -279,7 +279,7 @@
     </style>
 </head>
 <body>
-<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.95 Beta</div>
+<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v1.0</div>
 <div class="card">
     <h1>WLED Font Factory</h1>
     <div class="controls" style="position: sticky; top: 0; z-index: 100; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);">
@@ -397,7 +397,7 @@
         </div>
 
         <div id="wledFs" style="display:none; font-size:11px; border-top:1px solid #333; padding-top:10px;">
-            <div style="color:#888; margin-bottom:8px;">Fonts on device (click to delete):</div>
+            <div style="color:#888; margin-bottom:8px;">Fonts on device:</div>
             <div id="fList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
         </div>
     </div>
@@ -1019,8 +1019,9 @@
             const files = await res.json();
             const wbf = files.filter(f => f.name.endsWith('.wbf'));
             $('fList').innerHTML = wbf.map(f => 
-                `<span style="cursor:pointer; text-decoration:underline; margin-right:12px; color:#8cf" 
-                onclick="del('${f.name}')">${f.name}</span>`
+                `<div style="margin-right:15px">${f.name} 
+                    <b onclick="del('${f.name}')" style="cursor:pointer;color:#00f2ff;padding:0 4px">✖</b>
+                </div>`
             ).join('') || 'None';
             $('upBtn').style.display = 'inline-block';
             $('wledFs').style.display = 'block';
