@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WLED Effect Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;1,300&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.js"></script>
+<style>
+  :root {
+    --bg:        #0d0d14;
+    --surface:   #13131f;
+    --surface2:  #1a1a2a;
+    --border:    #2a2a3f;
+    --accent:    #ff6b35;
+    --accent2:   #ffaa44;
+    --green:     #39ff14;
+    --red:       #ff3355;
+    --text:      #c8c8e0;
+    --text-dim:  #6060a0;
+    --mono:      'JetBrains Mono', monospace;
+    --display:   'Orbitron', monospace;
+    --cell:      6; /* px per LED (5 colored + 1 border) */
+    --leds-per-row: 32;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    padding: 24px;
+    background-image:
+      radial-gradient(ellipse at 10% 0%, rgba(255,107,53,.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 90% 100%, rgba(57,255,20,.04) 0%, transparent 50%);
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .title-block h1 {
+    font-family: var(--display);
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    color: #fff;
+  }
+  .title-block p {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    margin-top: 2px;
+  }
+
+  /* ── connection panel ─────────────────────────────────────── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+
+  .panel-title {
+    font-family: var(--display);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .conn-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .label {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    letter-spacing: 0.06em;
+  }
+
+  input[type=text], input[type=number] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 7px 12px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  input[type=text]:focus, input[type=number]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(255,107,53,.15);
+  }
+  input[type=text]  { width: 180px; }
+
+  button {
+    font-family: var(--display);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    font-weight: 700;
+    padding: 8px 18px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all .15s;
+    text-transform: uppercase;
+  }
+  button:active { transform: scale(.97); }
+
+  .btn-connect {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-connect:hover { background: var(--accent2); }
+
+  .btn-disconnect {
+    background: transparent;
+    border: 1px solid var(--red);
+    color: var(--red);
+  }
+  .btn-disconnect:hover { background: rgba(255,51,85,.12); }
+
+  .btn-record {
+    background: var(--red);
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-record:hover { background: #ff5577; }
+  .btn-record.recording {
+    background: transparent;
+    border: 1px solid var(--red);
+    color: var(--red);
+    animation: rec-pulse 1s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255,51,85,.5); }
+    50%      { box-shadow: 0 0 0 6px rgba(255,51,85,0); }
+  }
+
+  .btn-stop {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-stop:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-download {
+    background: var(--green);
+    color: #000;
+  }
+  .btn-download:hover { filter: brightness(1.15); }
+
+  /* ── status indicator ─────────────────────────────────────── */
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-dim);
+    transition: background .3s;
+  }
+  .dot.connected    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.connecting   { background: var(--accent2); animation: blink .6s step-start infinite; }
+  .dot.error        { background: var(--red); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  #status-text { color: var(--text-dim); }
+
+  /* ── controls row ─────────────────────────────────────────── */
+  .controls-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .rec-counter {
+    font-family: var(--display);
+    font-size: 11px;
+    color: var(--red);
+    letter-spacing: 0.1em;
+    min-width: 80px;
+  }
+
+  .info-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+  .info-badge span {
+    color: var(--accent2);
+    font-weight: 600;
+  }
+
+  /* ── preview area ─────────────────────────────────────────── */
+  .preview-wrap {
+    position: relative;
+    margin-bottom: 16px;
+  }
+
+  #canvas-container {
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    display: inline-block;
+    position: relative;
+    transition: border-color .3s;
+    min-width: 220px;
+    min-height: 60px;
+  }
+  #canvas-container.live { border-color: var(--accent); }
+  #canvas-container.recording-active {
+    border-color: var(--red);
+    box-shadow: 0 0 0 1px var(--red), 0 0 20px rgba(255,51,85,.2);
+  }
+
+  #preview-canvas {
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  .rec-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--red);
+    color: #fff;
+    font-family: var(--display);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    padding: 3px 8px;
+    border-radius: 3px;
+    display: none;
+    align-items: center;
+    gap: 5px;
+  }
+  .rec-badge::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #fff;
+    animation: blink .8s step-start infinite;
+  }
+  .rec-badge.visible { display: flex; }
+
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-dim);
+    font-size: 11px;
+    pointer-events: none;
+  }
+  .empty-state .icon {
+    font-size: 32px;
+    opacity: 0.3;
+  }
+
+  /* ── GIF output ───────────────────────────────────────────── */
+  #gif-section {
+    display: none;
+  }
+  #gif-section.visible { display: block; }
+
+  .gif-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  #gif-preview {
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: block;
+    max-width: 100%;
+  }
+
+  .gif-meta {
+    font-size: 11px;
+    line-height: 1.9;
+    color: var(--text-dim);
+  }
+  .gif-meta .val { color: var(--accent2); }
+
+  .progress-bar-wrap {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 0;
+  }
+  .progress-bar-wrap.visible { display: flex; }
+  .progress-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+  .progress-bar-bg {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    width: 300px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    width: 0%;
+    transition: width .1s;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>WLED FX RECORDER</h1>
+    <p>Live effect preview &amp; GIF capture for documentation</p>
+  </div>
+</header>
+
+To document effects on kno.wled.ge use these settings:<br>  
+2D effects: use 25x25 matrix <br>  
+1D effects use length of 75, set 1D LEDS / ROW to 25 <br>  
+Set WLED FPS limit to 60, disable wifi sleep.<br>
+Works in AP mode or connected to wifi, choose a channel that has as little traffic as possible to avoid stuttering.<br>
+FPS should be stable at  ~23FPS <br>
+If you get only 10FPS on Windows, check NetworkThrottlingIndex and TCP Delayed ACK <br> <br>
+
+<!-- Connection -->
+<div class="panel">
+  <div class="panel-title">Connection</div>
+  <div class="conn-row">
+    <span class="label">IP ADDRESS</span>
+    <input type="text" id="ip-input" placeholder="192.168.1.x" value="">
+    <button class="btn-connect" id="btn-connect" onclick="connect()">Connect</button>
+    <button class="btn-disconnect" id="btn-disconnect" onclick="disconnect()" style="display:none">Disconnect</button>
+  </div>
+  <div class="status-row">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">Not connected</span>
+  </div>
+</div>
+
+<!-- Controls & Recording -->
+<div class="panel">
+  <div class="panel-title">Recording</div>
+  <div class="controls-row">
+    <button class="btn-record" id="btn-record" onclick="startRecording()" disabled>● Record</button>
+    <button class="btn-stop"   id="btn-stop"   onclick="stopRecording()" disabled>■ Stop</button>
+    <span class="rec-counter" id="rec-counter"></span>
+    <div class="info-badge" id="info-badge" style="display:none">
+      Mode: <span id="mode-label">—</span> &nbsp;|&nbsp; LEDs: <span id="led-count">—</span>
+    </div>
+	<div class="info-badge" id="fps-badge">— fps</div>
+  </div>
+  <div class="conn-row" id="leds-per-row-row" style="margin-top:10px; display:none">
+    <span class="label">1D LEDS / ROW</span>
+    <input type="number" id="leds-per-row-input" value="25" min="1" max="300"
+           style="width:70px"
+           oninput="LEDS_PER_ROW = Math.max(1, parseInt(this.value) || 25)">
+  </div>
+</div>
+
+<!-- Live Preview -->
+<div class="panel preview-wrap">
+  <div class="panel-title">Live Preview</div>
+  <div id="canvas-container">
+    <div class="empty-state" id="empty-state">
+      <span class="icon">◈</span>
+      <span>Connect to a WLED device to see the live preview</span>
+    </div>
+    <canvas id="preview-canvas" width="0" height="0"></canvas>
+    <div class="rec-badge" id="rec-badge">REC</div>
+  </div>
+</div>
+
+<!-- GIF Output -->
+<div class="panel" id="gif-section">
+  <div class="panel-title">Captured GIF</div>
+  <div class="progress-bar-wrap" id="progress-wrap">
+    <span class="progress-label" id="progress-label">Encoding GIF…</span>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progress-fill"></div>
+    </div>
+  </div>
+  <div class="gif-container" id="gif-container" style="display:none">
+    <img id="gif-preview" alt="Recorded GIF">
+    <div>
+      <div class="gif-meta" id="gif-meta"></div>
+      <br>
+      <button class="btn-download" id="btn-download">↓ Download GIF</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+const CELL         = 6;   // px per LED: 5 colored + 1 black border
+let LEDS_PER_ROW = 25;  // max LEDs per row in 1D mode
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+let ws             = null;
+let isConnected    = false;
+let isRecording    = false;
+let recordedFrames = [];
+let latestFrame    = null;   // { type, w, h, data: Uint8Array }
+let recSeconds     = 0;
+let recTick        = null;
+let gifObjectURL   = null;
+let fpsCount = 0, fpsLast = performance.now(), fpsDisplay = 0;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Palette generation
+// ─────────────────────────────────────────────────────────────────────────────
+function generatePalette(frames) {
+  // Drop LSBs until all unique colors fit in 256
+  for (let drop = 0; drop < 8; drop++) {
+    const mask  = 0xFF & (0xFF << drop);
+    const colorMap = new Map();
+    const palette  = [0x000000];   // index 0 = black for borders
+    colorMap.set(0x000000, 0);
+
+    let fits = true;
+    outer:
+    for (const frame of frames) {
+      const d = frame.data;
+      for (let i = 0; i < d.length; i += 3) {
+        const color = ((d[i] & mask) << 16) | ((d[i+1] & mask) << 8) | (d[i+2] & mask);
+        if (!colorMap.has(color)) {
+          if (palette.length >= 256) { fits = false; break outer; }
+          colorMap.set(color, palette.length);
+          palette.push(color);
+        }
+      }
+    }
+
+    if (fits) {
+      // Pad to power of 2 for omggif
+      let len = 2;
+      while (len < palette.length) len *= 2;
+      while (palette.length < len) palette.push(0);
+      return { palette, colorMap, mask };
+    }
+  }
+}
+
+function getColorIndex(r, g, b, colorMap, mask) {
+  const color = ((r & mask) << 16) | ((g & mask) << 8) | (b & mask);
+  return colorMap.get(color) ?? 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebSocket / Connection
+// ─────────────────────────────────────────────────────────────────────────────
+function connect() {
+  const ip = document.getElementById('ip-input').value.trim();
+  if (!ip) return setStatus('Enter an IP address', '');
+
+  if (ws) ws.close();
+  setStatus('Connecting…', 'connecting');
+
+  try {
+    ws = new WebSocket(`ws://${ip}/ws`);
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      isConnected = true;
+      setStatus(`Connected to ${ip}`, 'connected');
+      showConnect(false);
+      document.getElementById('btn-record').disabled = false;
+      ws.send(JSON.stringify({ lv: true }));
+	  startRenderLoop()
+    };
+
+    ws.onmessage = (evt) => {
+      if (evt.data instanceof ArrayBuffer) handleBinaryFrame(evt.data);
+    };
+
+    ws.onerror = () => setStatus('Connection error', 'error');
+
+    ws.onclose = () => {
+      isConnected = false;
+      if (isRecording) stopRecording();
+	  stopRenderLoop()
+      setStatus('Disconnected', '');
+      showConnect(true);
+      document.getElementById('btn-record').disabled = true;
+      document.getElementById('canvas-container').classList.remove('live');
+      document.getElementById('empty-state').style.display = 'flex';
+      latestFrame = null;
+    };
+  } catch(e) {
+    setStatus('Invalid address', 'error');
+  }
+}
+
+function disconnect() {
+  if (ws) ws.close();
+}
+
+function showConnect(showBtn) {
+  document.getElementById('btn-connect').style.display    = showBtn ? '' : 'none';
+  document.getElementById('btn-disconnect').style.display = showBtn ? 'none' : '';
+}
+
+function setStatus(msg, state) {
+  document.getElementById('status-text').textContent = msg;
+  const dot = document.getElementById('status-dot');
+  dot.className = 'dot' + (state ? ' ' + state : '');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parse WLED binary live-view frame
+//   Byte 0: ID -> "L" (76)
+//   Byte 1: 1 = 1D strip, 2 = 2D matrix
+//   1D → [L][1][n][R,G,B …]
+//   2D → [L][2][w][h][R,G,B …]
+// ─────────────────────────────────────────────────────────────────────────────
+function handleBinaryFrame(buf) {
+  fpsCount++;
+  const now = performance.now();
+  if (now - fpsLast >= 1000) {
+    fpsDisplay = fpsCount;
+    fpsCount = 0;
+    fpsLast = now;
+    document.getElementById('fps-badge').textContent = `${fpsDisplay} fps`;
+  }
+  const u8 = new Uint8Array(buf);
+  if (u8[0] !== 76) return;
+
+  const type = u8[1];
+  let w, h, dataOffset;
+
+  if (type === 1) {
+    dataOffset = 2; w = Math.floor((u8.length - 2) / 3); h = 1;
+  } else if (type === 2) {
+    w = u8[2]; h = u8[3]; dataOffset = 4;
+  } else return;
+
+  if (w < 1 || u8.length < dataOffset + w * h * 3) return;
+
+  const data = u8.slice(dataOffset, dataOffset + w * h * 3);
+  latestFrame = { type, w, h, data };
+
+  if (isRecording) recordedFrames.push({ type, w, h, data, ts: performance.now() });
+
+  document.getElementById('info-badge').style.display = '';
+  document.getElementById('mode-label').textContent = type === 1 ? '1D Strip' : '2D Matrix';
+  document.getElementById('leds-per-row-row').style.display = type === 1 ? '' : 'none';
+  document.getElementById('led-count').textContent  = type === 1 ? `${w}` : `${w} × ${h}`;
+  document.getElementById('canvas-container').classList.add('live');
+  document.getElementById('empty-state').style.display = 'none';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Canvas rendering
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('preview-canvas');
+const ctx    = canvas.getContext('2d');
+
+function getCanvasDims(frame) {
+  if (frame.type === 2) {
+    return { cw: frame.w * CELL, ch: frame.h * CELL };
+  } else {
+    const cols = Math.min(frame.w, LEDS_PER_ROW);
+    const rows = Math.ceil(frame.w / LEDS_PER_ROW);
+    return { cw: cols * CELL, ch: rows * CELL };
+  }
+}
+
+let rafId = null;
+function startRenderLoop() {
+  if (rafId) return;
+  function loop() {
+    if (latestFrame) renderToCanvas(latestFrame);
+    rafId = requestAnimationFrame(loop);
+  }
+  rafId = requestAnimationFrame(loop);
+}
+function stopRenderLoop() {
+  cancelAnimationFrame(rafId); rafId = null;
+}
+
+function renderToCanvas(frame) {
+  const { cw, ch } = getCanvasDims(frame);
+  if (canvas.width !== cw || canvas.height !== ch) {
+    canvas.width  = cw;
+    canvas.height = ch;
+  }
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, cw, ch);
+
+  if (frame.type === 2) {
+    for (let y = 0; y < frame.h; y++) {
+      for (let x = 0; x < frame.w; x++) {
+        const i = (y * frame.w + x) * 3;
+        drawLED(x, y, frame.data[i], frame.data[i+1], frame.data[i+2]);
+      }
+    }
+  } else {
+    for (let i = 0; i < frame.w; i++) {
+      const col = i % LEDS_PER_ROW;
+      const row = Math.floor(i / LEDS_PER_ROW);
+      const d   = i * 3;
+      drawLED(col, row, frame.data[d], frame.data[d+1], frame.data[d+2]);
+    }
+  }
+}
+
+function drawLED(col, row, r, g, b) {
+  ctx.fillStyle = `rgb(${r},${g},${b})`;
+  ctx.fillRect(col * CELL, row * CELL, CELL - 1, CELL - 1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recording
+// ─────────────────────────────────────────────────────────────────────────────
+function startRecording() {
+  if (!isConnected || !latestFrame) return;
+
+  isRecording    = true;
+  recordedFrames = [];
+  recSeconds     = 0;
+
+  document.getElementById('btn-record').disabled = true;
+  document.getElementById('btn-record').classList.add('recording');
+  document.getElementById('btn-stop').disabled = false;
+  document.getElementById('rec-badge').classList.add('visible');
+  document.getElementById('canvas-container').classList.add('recording-active');
+  document.getElementById('gif-section').classList.remove('visible');
+
+  updateCounter();
+  recTick = setInterval(() => { recSeconds++; updateCounter(); }, 1000);
+}
+
+function updateCounter() {
+  const secs = recSeconds;
+  document.getElementById('rec-counter').textContent =
+    `${String(Math.floor(secs/60)).padStart(2,'0')}:${String(secs%60).padStart(2,'0')}  ${recordedFrames.length}f`;
+}
+
+function stopRecording() {
+  isRecording = false;
+  clearInterval(recTick);
+
+  document.getElementById('btn-record').disabled = false;
+  document.getElementById('btn-record').classList.remove('recording');
+  document.getElementById('btn-stop').disabled = true;
+  document.getElementById('rec-badge').classList.remove('visible');
+  document.getElementById('canvas-container').classList.remove('recording-active');
+  document.getElementById('rec-counter').textContent = '';
+
+  if (recordedFrames.length === 0) return;
+
+  document.getElementById('gif-section').classList.add('visible');
+  document.getElementById('gif-container').style.display = 'none';
+  document.getElementById('progress-wrap').classList.add('visible');
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('progress-label').textContent = 'Encoding GIF…';
+
+  setTimeout(() => buildGIF(recordedFrames), 50);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GIF encoding
+// ─────────────────────────────────────────────────────────────────────────────
+function buildGIF(frames) {
+  if (!frames.length) return;
+  const f0 = frames[0];
+  const { palette, colorMap, mask } = generatePalette(frames);
+
+  let gifW, gifH;
+  if (f0.type === 2) {
+    gifW = f0.w * CELL; gifH = f0.h * CELL;
+  } else {
+    gifW = Math.min(f0.w, LEDS_PER_ROW) * CELL;
+    gifH = Math.ceil(f0.w / LEDS_PER_ROW) * CELL;
+  }
+
+  const buf = new Uint8Array(gifW * gifH * frames.length + 1024);
+  const gif = new GifWriter(buf, gifW, gifH, { loop: 0, palette });
+
+  // Pre-index all frames
+  const indexed = frames.map(f => frameToIndexed(f, gifW, gifH, f0.type, palette, colorMap, mask));
+
+  // Per-frame delay: gap to next frame's timestamp (centiseconds).
+  // Last frame reuses the previous inter-frame gap as best estimate.
+  const delays = frames.map((f, i) => {
+    const ms = i + 1 < frames.length
+      ? frames[i+1].ts - f.ts
+      : (i > 0 ? f.ts - frames[i-1].ts : 50);
+    return Math.max(1, Math.round(ms / 10));
+  });
+
+  // Merge consecutive identical frames by accumulating delay
+  const merged = [{ idx: indexed[0], delay: delays[0] }];
+  for (let i = 1; i < indexed.length; i++) {
+    const same = indexed[i].every((v, j) => v === indexed[i-1][j]);
+    if (same) merged[merged.length-1].delay += delays[i];
+    else merged.push({ idx: indexed[i], delay: delays[i] });
+  }
+
+  let fi = 0;
+  function encodeNext() {
+    const end = Math.min(fi + 5, merged.length);
+    for (; fi < end; fi++) {
+      gif.addFrame(0, 0, gifW, gifH, merged[fi].idx, { delay: merged[fi].delay, disposal: 1 });
+      document.getElementById('progress-fill').style.width = Math.round((fi+1)/merged.length*100) + '%';
+      document.getElementById('progress-label').textContent = `Encoding GIF… ${fi+1}/${merged.length}`;
+    }
+    if (fi < merged.length) setTimeout(encodeNext, 0);
+    else finishGIF(buf, gif, gifW, gifH, frames);
+  }
+  encodeNext();
+}
+
+function frameToIndexed(frame, gifW, gifH, type, palette, colorMap, mask) {
+  const indexed = new Uint8Array(gifW * gifH);
+  const data    = frame.data;
+  const ledW    = (type === 2) ? frame.w : Math.min(frame.w, LEDS_PER_ROW);
+
+  for (let i = 0; i < (frame.w * (type === 2 ? frame.h : 1)); i++) {
+    const lx = i % ledW;
+    const ly = Math.floor(i / ledW);
+    const pi = getColorIndex(data[i*3], data[i*3+1], data[i*3+2], colorMap, mask);
+
+    for (let cy = 0; cy < CELL; cy++) {
+      for (let cx = 0; cx < CELL; cx++) {
+        const gx = lx * CELL + cx;
+        const gy = ly * CELL + cy;
+        if (gx < gifW && gy < gifH) {
+          indexed[gy * gifW + gx] = (cx === CELL-1 || cy === CELL-1) ? 0 : pi;
+        }
+      }
+    }
+  }
+  return indexed;
+}
+
+function finishGIF(buf, gif, gifW, gifH, frames) {
+  const data = buf.slice(0, gif.end());
+  const blob = new Blob([data], { type: 'image/gif' });
+
+  if (gifObjectURL) URL.revokeObjectURL(gifObjectURL);
+  gifObjectURL = URL.createObjectURL(blob);
+
+  document.getElementById('progress-wrap').classList.remove('visible');
+  document.getElementById('gif-container').style.display = 'flex';
+  document.getElementById('gif-preview').src = gifObjectURL;
+
+  const durS   = (frames[frames.length-1].ts - frames[0].ts) / 1000;
+  const avgFps = (frames.length / durS).toFixed(1);
+  const kb     = (data.byteLength / 1024).toFixed(1);
+  document.getElementById('gif-meta').innerHTML =
+    `Resolution <span class="val">${gifW} × ${gifH} px</span><br>` +
+    `Frames <span class="val">${frames.length}</span><br>` +
+    `Duration <span class="val">${durS.toFixed(1)} s</span><br>` +
+    `Avg FPS <span class="val">${avgFps}</span><br>` +
+    `File size <span class="val">${kb} KB</span>`;
+
+	document.getElementById('btn-download').onclick = async () => {
+	  let name = `wled-effect-${Date.now()}`;
+	  try {
+		const ip  = document.getElementById('ip-input').value.trim();
+		const res = await fetch(`http://${ip}/json/state`);
+		const json = await res.json();
+		const fx  = json.seg?.[0]?.fx;
+		if (fx != null) name = `FX_${String(fx).padStart(3, '0')}`;
+	  } catch(e) {}
+	  const a = document.createElement('a');
+	  a.href = gifObjectURL; a.download = name + '.gif'; a.click();
+	};
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Allow Enter key to connect
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('ip-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') connect();
+});
+</script>
+</body>
+</html>
