@@ -579,11 +579,13 @@
 			if (is1D) {
 				offCtx.fillStyle = "#111"; offCtx.fillRect(0,0,w,1);
 				for (let i=0;i<w;i++){const c=matrix[i];offCtx.fillStyle=`rgb(${c.r},${c.g},${c.b})`;offCtx.fillRect(i,0,1,1);}
+				if(onionEnabled&&animMode==='sm'&&animFrames.length)drawOnion(offCtx,w,1);
 				ctxPrev1D.imageSmoothingEnabled=false;
 				ctxPrev1D.drawImage(offCanv,0,0,canvPrev1D.width,canvPrev1D.height);
 				rowCanv.forEach(r=>{
-					const c=r.ctx,cv=r.canv; c.fillStyle="#111"; c.fillRect(0,0,cv.width,cv.height);
-					for(let i=r.si;i<r.ei;i++){const col=matrix[i];c.fillStyle=`rgb(${col.r},${col.g},${col.b})`;c.fillRect((i-r.si)*LED_PX_SIZE,0,LED_PX_SIZE,cv.height);}
+					const c=r.ctx,cv=r.canv;
+					c.imageSmoothingEnabled=false;
+					c.drawImage(offCanv,r.si,0,r.ei-r.si,1,0,0,cv.width,cv.height);
 					c.strokeStyle='#666'; c.lineWidth=1; c.beginPath();
 					for(let i=1;i<(r.ei-r.si);i++){const x=i*LED_PX_SIZE; c.moveTo(x,0); c.lineTo(x,cv.height);}
 					c.stroke();
@@ -619,7 +621,7 @@
 			for(let i=1;i<w;i++){const px=i*PIXEL_SIZE;ctx.moveTo(px,0);ctx.lineTo(px,canv.height);}
 			for(let j=1;j<h;j++){const py=j*PIXEL_SIZE;ctx.moveTo(0,py);ctx.lineTo(canv.width,py);}
 			ctx.stroke();
-			if(onionEnabled&&animMode==='sm'&&animFrames.length)drawOnion();
+			if(onionEnabled&&animMode==='sm'&&animFrames.length)drawOnion(ctx,w,h);
 		}
 
 		function setPx(x,y,col,op=1,draw=true){
@@ -1303,15 +1305,15 @@
 		function setPlayAsRec(on){playAsRec=on;}
 
 		// overlays the last saved stop-motion frame at low opacity so the next frame can be aligned to it
-		function drawOnion(){
+		function drawOnion(targetCtx, tw, th){
 			let srcIdx=selFrameIdx>=0?selFrameIdx-1:animFrames.length-1;
 			if(srcIdx<0||srcIdx>=animFrames.length)return;
 			const prev=animFrames[srcIdx].pixels;
-			const tmp=cE('canvas');tmp.width=w;tmp.height=h;
-			tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(prev),w,h),0,0);
-			ctx.save();ctx.globalCompositeOperation='lighter';ctx.imageSmoothingEnabled=false;
-			ctx.drawImage(tmp,0,0,canv.width,canv.height);
-			ctx.restore();
+			const tmp=cE('canvas');tmp.width=tw;tmp.height=th;
+			tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(prev),tw,th),0,0);
+			targetCtx.save();targetCtx.globalCompositeOperation='lighter';targetCtx.globalAlpha=0.3;targetCtx.imageSmoothingEnabled=false;
+			targetCtx.drawImage(tmp,0,0,targetCtx.canvas.width,targetCtx.canvas.height);
+			targetCtx.restore();
 		}
 
 		// plays back the captured frames in a small preview canvas using each frame's own delay
