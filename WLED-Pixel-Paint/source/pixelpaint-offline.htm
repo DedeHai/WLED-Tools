@@ -28,14 +28,16 @@
 		body.mode-1d { max-width: none; }
 		*, *::before, *::after { box-sizing: border-box; }
 
-		button, .btn {
+		button, .btn, input, select {
 			background: #333;
 			color: #fff;
 			font-family: Verdana, sans-serif;
+			margin: 2px;
+		}
+		button, .btn {
 			border: 0.3ch solid #333;
 			border-radius: 24px;
 			font-size: 20px;
-			margin: 2px 2px;
 			padding: 8px 12px;
 			min-width: 48px;
 			cursor: pointer;
@@ -43,14 +45,8 @@
 		}
 		button:hover, .btn:hover { background: #555; border-color: #555; }
 		button:disabled { background: #222; color: #666; cursor: not-allowed; }
-		input, select {
-			background: #333;
-			color: #fff;
-			font-family: Verdana, sans-serif;
-			border: 0.5ch solid #333;
-			font-size: medium;
-			margin: 2px;
-		}
+		.btn-sml { font-size: 14px; padding: 4px 10px; }
+		input, select { border: 0.5ch solid #333; font-size: medium; }
 		input[type="number"] { width: 5em; }
 
 		.title {
@@ -161,7 +157,7 @@
 
 		.upload-section { margin: 20px 0; padding: 0 4px; }
 		.filename-input { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; margin-bottom: 12px; }
-		.filename-input input[type="text"] { max-width: 200px; padding: 6px 10px; }
+		.filename-input input[type="text"]{max-width:200px;padding:6px 10px}
 
 		@media (min-aspect-ratio: 4/3) and (min-width: 600px) {
 			body:not(.mode-1d) .main-content { flex-direction: row; align-items: flex-start; justify-content: center; gap: 16px; }
@@ -178,10 +174,26 @@
 			body.mode-1d .row-canvas-wrapper canvas { height: 40px !important; }
 			body.mode-1d #canvPrev1D { height: 50px !important; }
 		}
+
+		.anim-section{margin:20px 0;padding:0 4px}
+		.anim-row{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+		.dim{font-size:13px;}
+		.anim-tab{border-radius:20px;padding:6px 18px;font-size:15px;cursor:pointer;background:#333;border:2px solid #555}
+		.anim-tab.selected{background:#08d;color:#fff}
+		.sm-panel{display:none}
+		.sm-panel.visible{display:block}
+		.frame-list{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin:8px auto;max-height:400px;overflow-y:auto}
+		.frame-item{display:flex;align-items:center;gap:4px;background:#333;border-radius:6px;padding:2px 8px;font-size:12px;color:#ccc;cursor:pointer}
+		.frame-item.selected{background:#08d;color:#fff}
+		.frame-item.selected span{color:#fff!important}
+		.frame-item .del-f{font-size:11px;padding:1px 5px;min-width:unset;margin:0;border-radius:10px}
+		#recBtn.recording{background:#a00;color:#fff}
+		#animPrv{border:2px solid #08d;background:#111;image-rendering:pixelated;max-width:min(90vw,400px);display:block;margin:8px auto}
 	</style>
 </head>
 <body>
-	<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v1.11</div>
+	<div id="toast"></div>
+	<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v1.2</div>
 	<div class="title">WLED <span class="rb">PIXEL</span> Paint</div>
 	<div class="matrix-controls">
 		<h3>Target Segment</h3>
@@ -195,7 +207,6 @@
 		<div>
 			<button onclick="togglePreview()" title="Live Preview" id="status">Preview Off</button>
 		</div>
-		<!-- <div><input type="checkbox" id="frz" checked> Freeze Segment</div> -->
 	</div>
 	<div style="margin-top: 16px; margin-bottom: 16px;">
 		<button onclick="openImage()" title="Open Image" class="tool-btn action"><span>&#xf07c;</span></button>
@@ -234,8 +245,52 @@
 			<div class="wrapped-rows-container" id="wrapRowCont"></div>
 			<div class="wrapped-canvas-container">
 				<canvas id="canv"></canvas>
+				<div style="text-align:center;margin-top:8px;display:none;" id="smControls">
+					<button class="btn btn-sml" onclick="addSMFrame()">Add Frame</button>
+					<button class="btn btn-sml" id="updBtn" onclick="updateSMFrame()" disabled>Update Frame</button>
+					<button class="btn btn-sml" id="insBtn" onclick="insertSMFrame()" disabled>Insert Before</button>
+					</div>
+					<span id="durWrap" style="display:none">
+    				<label>Frame Duration: <input type="number" id="smDur" value="200" min="10" max="9999"> ms</label>
+    				<button class="btn btn-sml" id="applyAllBtn" onclick="updateSMFrame(true)"  disabled>Apply to All</button>
+					</span>
+			    </div></div>
 			</div>
 		</div>
+	</div>
+
+	<div id="smFrameList" class="frame-list" style="margin:8px auto;display:none;"></div>
+
+	<div class="anim-section" id="animSect">
+		<h3>Animation</h3>
+		<div class="anim-row" style="margin-bottom:12px">
+			<button class="anim-tab" id="smBtn" onclick="toggleSMMode()">Frame By Frame</button>
+			<button class="anim-tab" id="recBtn" onclick="toggleRecord()">&#9679; Record</button>
+		</div>
+		<div class="anim-row dim" style="margin-bottom:8px">
+			<span id="recWrap"><label>Record FPS: <input type="number" id="recFps" value="10" min="0.1" max="30"> </label>
+			<label><input type="checkbox" id="fixDurCheck" onchange="setPlayAsRec(this.checked)"> Auto Pause</label></span>
+	
+		</div>
+		<div class="sm-panel" id="smPanel">
+			<div class="anim-row" style="margin-bottom:8px">
+				<label><input type="checkbox" id="smOnion" onchange="setOnion(this.checked)"> Overlay last frame</label>
+			</div>
+		</div>
+
+		<div id="animPrvArea" style="display:none;text-align:center;margin-top:14px;">
+			<div class="anim-row">
+			    <label><input type="checkbox" id="ppCheck" onchange="setPingPong(this.checked)"> Ping-Pong</label>
+		    </div>
+			<canvas id="animPrv"></canvas>
+			<div id="animInfo" class="dim"></div>
+			<div id="animClrArea" style="display:none;text-align:center;margin-top:8px;">
+			    <button class="btn" onclick="clearAnim()">Clear frames</button>
+		    </div>
+			<button class="btn" onclick="downloadAnimGif()">Download GIF</button>
+			<button class="btn" onclick="uploadAnimGif()">Upload to WLED</button>
+		</div>
+
 	</div>
 	<div class="upload-section" id="uploadSect">
 		<div class="upload">
@@ -264,37 +319,6 @@
 			{name:"Smear",   icon: "&#xf25a;"},  // smear hand f25a
 		];
 
-		TOOLS.forEach((t,i)=>{
-			const btn = document.createElement("button");
-			btn.className = "tool-btn" + (i==5?" selected":"") + (i<3?" hide-1d":"");
-			btn.innerHTML = t.icon;
-			btn.title = t.name;
-			btn.onclick = ()=>{
-				document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove("selected"));
-				btn.classList.add("selected");
-				tool = i;
-			};
-			document.getElementById("tools").appendChild(btn);
-		});
-
-		const canv = document.getElementById("canv"), ctx = canv.getContext("2d");
-		const canvPrev1D = document.getElementById("canvPrev1D"), ctxPrev1D = canvPrev1D.getContext("2d");
-		const mW = document.getElementById("matrixW"), mH = document.getElementById("matrixH");
-		const statusEl = document.getElementById("status"), wrapRowCont = document.getElementById("wrapRowCont");
-		const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-		let w = DEFAULT_MATRIX, h = DEFAULT_MATRIX, matrix = [], segs = [], curSeg = null;
-		let painting = false, tool = 5, startPt = null, lastPos = null, preview = null;
-		let iroPicker, brushSize = 1, brushHard = 100, hue = 0;
-		let undoStack = []; let redoStack = [];
-		let ws = null, prvEn = false, maxColInd = null, prvTmr = null;
-		let lastSentMtx = [], snapMtx = null;
-		let is1D = false, wrapW = 50, rowCanv = [], selRow = 0;
-		let offCanv = document.createElement('canvas'), offCtx = offCanv.getContext('2d'); // off-screen canvas that hold the actual pixel data
-		let globalBri = null;
-
-		const c2h = (r,g,b)=>((r<<16)|(g<<8)|b).toString(16).padStart(6,'0').toUpperCase(); // rgb to hex
-		//const h2c = h=>{const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:0,g:0,b:0};};
-
 		// load external resources in sequence to avoid 503 errors if heap is low, repeats indefinitely until loaded
 		(function loadFiles() {
 			const s = document.createElement('script');
@@ -306,9 +330,32 @@
 			document.head.appendChild(s);
 		})();
 
-		// init function, reads current segements and puts them in the select list
+		let canv, ctx, canvPrev1D, ctxPrev1D, mW, mH, statusEl, wrapRowCont;
+		let w = DEFAULT_MATRIX, h = DEFAULT_MATRIX, matrix = [], segs = [], curSeg = null;
+		let painting = false, tool = 5, startPt = null, lastPos = null, preview = null;
+		let iroPicker, brushSize = 1, brushHard = 100, hue = 0;
+		let undoStack = []; let redoStack = [];
+		let ws = null, prvEn = false, maxColInd = null, prvTmr = null;
+		let lastSentMtx = [], snapMtx = null;
+		let is1D = false, wrapW = 50, rowCanv = [], selRow = 0;
+		let offCanv, offCtx;
+		let globalBri = null;
+		let animFrames = [], animMode = 'rec', isRecording = false, recIntervalId = null, playAsRec = false;
+		let animPrvTimer = null, onionEnabled = false, lastAnimBlob = null, pingPong = false;
+		let selFrameIdx = -1;
+
+		const c2h = (r,g,b)=>((r<<16)|(g<<8)|b).toString(16).padStart(6,'0').toUpperCase();
+
+		// init function, reads current segments and puts them in the select list
 		async function init() {
 			getLoc();
+
+			canv = gId("canv"); ctx = canv.getContext("2d");
+			canvPrev1D = gId("canvPrev1D"); ctxPrev1D = canvPrev1D.getContext("2d");
+			mW = gId("matrixW"); mH = gId("matrixH");
+			statusEl = gId("status"); wrapRowCont = gId("wrapRowCont");
+			offCanv = cE('canvas'); offCtx = offCanv.getContext('2d');
+
 			// init iro color picker
 			iroPicker = new iro.ColorPicker('#iroPicker', {
 				width: 168,
@@ -321,7 +368,72 @@
 				]
 			});
 
-			const s1 = document.getElementById('seg');
+			// create tool buttons
+			const toolsEl = gId("tools");
+			TOOLS.forEach((t,i)=>{
+				const btn = cE("button");
+				btn.className = "tool-btn" + (i==5?" selected":"") + (i<3?" hide-1d":"");
+				btn.innerHTML = t.icon;
+				btn.title = t.name;
+				btn.onclick = ()=>{
+					for (const b of gEBCN('tool-btn')) b.classList.remove("selected");
+					btn.classList.add("selected");
+					tool = i;
+				};
+				toolsEl.appendChild(btn);
+			});
+
+			// init sliders
+			gId("sizeSlider").oninput = e=>{
+				brushSize = parseFloat(e.target.value);
+				gId("brushSizeLabel").textContent = brushSize.toFixed(1);
+			};
+			gId("hardnessSlider").oninput = e=>{
+				brushHard = +e.target.value;
+				gId("brushHardnessLabel").textContent = brushHard;
+			};
+
+			// update if selected segment changes
+			gId('seg').onchange = async e=>{
+				const o = e.target.selectedOptions[0];
+				const segId = +e.target.value;
+				if (prvEn && curSeg) await reqJson({seg:{id:curSeg.id,frz:false}});
+				curSeg = segs.find(s=>s.id===segId)||{id:segId,start:0};
+				mW.value = o.dataset.w; mH.value = o.dataset.h;
+				updateMatrix();
+				if (prvEn) {
+					await reqJson({seg:{id:curSeg.id,frz:true}});
+					lastSentMtx = new Array(w*h).fill(null);
+					await sendDirty();
+				}
+			};
+
+			mW.onchange = mH.onchange = updateMatrix;
+
+			// canvas events
+			canv.addEventListener('pointerdown',e=>startPaint(e,'2d'));
+			canv.addEventListener('pointermove',e=>{e.preventDefault();if(painting)paint(e,'2d');});
+			canv.addEventListener('pointerleave',()=>{preview=lastPos=null;drawAll();});
+
+			canvPrev1D.addEventListener('pointerdown',e=>startPaint(e,'1d'));
+			canvPrev1D.addEventListener('pointermove',e=>{e.preventDefault();if(painting)paint(e,'1d');});
+			canvPrev1D.addEventListener('pointerleave',()=>{lastPos=null;drawAll();});
+
+			document.addEventListener('pointerup',endPaint);
+
+			window.addEventListener('resize', ()=>{
+				if (!is1D) return;
+				clearTimeout(resizeTmr);
+				resizeTmr = setTimeout(()=>{
+					const oldSel = selRow; createRowCanv(); drawAll();
+					if (oldSel < rowCanv.length) selRow = oldSel;
+				}, 100);
+			});
+
+			// init tooltips
+			tooltip();
+
+			const s1 = gId('seg');
 			try {
 				const r = await fetch(getURL('/json/state')), j = await r.json();
 				globalBri = j.bri || 128;
@@ -330,9 +442,9 @@
 				if (segs.length) {
 					segs.forEach(seg => {
 						const {id,n,start,stop,startY,stopY,grp,spc} = seg;
-						const o = new Option(n || `Segment ${id}`, id);
 						const g = grp || 1, s = spc || 0;
 						const physH = stopY - startY;
+						const o = new Option(n || `Segment ${id}`, id);
 						o.dataset.w = Math.ceil((stop - start) / (g + s));
 						o.dataset.h = physH > 1 ? Math.ceil(physH / (g + s)) : 1;
 						o.dataset.segData = JSON.stringify(seg);
@@ -348,32 +460,8 @@
 				if (o) { mW.value = o.dataset.w || 16; mH.value = o.dataset.h || 16; updateMatrix(); }
 			} catch(e) { console.error(e); }
 			updateMatrix();
-			togglePreview(); // enable preview on page load (also init's WS connection)
+			togglePreview();
 		}
-
-		document.getElementById("sizeSlider").oninput = e=>{
-			brushSize = parseFloat(e.target.value);
-			document.getElementById("brushSizeLabel").textContent = brushSize.toFixed(1);
-		};
-		document.getElementById("hardnessSlider").oninput = e=>{
-			brushHard = +e.target.value;
-			document.getElementById("brushHardnessLabel").textContent = brushHard;
-		};
-
-		// update if selected segment changes
-		document.getElementById('seg').onchange = async e=>{
-			const o = e.target.selectedOptions[0];
-			const segId = +e.target.value;
-			if (prvEn && curSeg) await reqJson({seg:{id:curSeg.id,frz:false}}); // unfreeze previous segment if preview enabled
-			curSeg = segs.find(s=>s.id===segId)||{id:segId,start:0};
-			mW.value = o.dataset.w; mH.value = o.dataset.h;
-			updateMatrix();
-			if (prvEn) {
-				await reqJson({seg:{id:curSeg.id,frz:true}});
-				lastSentMtx = new Array(w*h).fill(null);
-				await sendDirty();
-			}
-		};
 
 		function updateMatrix() {
 			is1D = +mH.value <= 1;
@@ -384,8 +472,8 @@
 				document.body.classList.add('mode-1d');
 				mW.disabled = true;
 				mH.disabled = true;
-				document.getElementById('prev1DCont').classList.add('visible');
-				document.querySelectorAll('.prev-1d-label').forEach(e=>e.style.display='block');
+				gId('prev1DCont').classList.add('visible');
+				for (const e of gEBCN('prev-1d-label')) e.style.display='block';
 				wrapRowCont.classList.add('visible');
 				canv.classList.add('hidden');
 				canvPrev1D.width = w;
@@ -395,12 +483,12 @@
 			} else {
 				w = Math.max(MIN_MATRIX, Math.min(MAX_MATRIX, +mW.value));
 				h = Math.max(1, Math.min(MAX_MATRIX, +mH.value));
-				mW.value = w; mH.value = h; // input fields
+				mW.value = w; mH.value = h;
 				document.body.classList.remove('mode-1d');
 				mW.disabled = false;
 				mH.disabled = false;
-				document.getElementById('prev1DCont').classList.remove('visible');
-				document.querySelectorAll('.prev-1d-label').forEach(e=>e.style.display='none');
+				gId('prev1DCont').classList.remove('visible');
+				for (const e of gEBCN('prev-1d-label')) e.style.display='none';
 				wrapRowCont.classList.remove('visible');
 				canv.classList.remove('hidden');
 				offCanv.width = w;
@@ -416,12 +504,11 @@
 			if (is1D) createRowCanv();
 			drawAll();
 		}
-		mW.onchange = mH.onchange = updateMatrix; // user input: update matrix size
 
 		// create 1D detail painting rows
 		function createRowCanv(){
 			wrapRowCont.innerHTML='';
-			rowCanv=[];	  const contW=(wrapRowCont.offsetWidth||800)-(isTouch?48:0);
+			rowCanv=[];	  const contW=(wrapRowCont.offsetWidth||800)-(('ontouchstart' in window || navigator.maxTouchPoints > 0)?48:0);
 			const optW=Math.floor(contW/LED_PX_SIZE);
 			wrapW=Math.max(10,Math.min(200,optW));
 			const numRows=Math.ceil(mW.value/wrapW);
@@ -431,18 +518,18 @@
 				const ei=Math.min(si+wrapW,mW.value);
 				const rw=ei-si;
 
-				const wrap=document.createElement('div');
+				const wrap=cE('div');
 				wrap.className='row-canvas-wrapper';
 				wrap.style.position='relative';
 				if(ri===0)wrap.classList.add('selected');
 
 				// Add pixel number label
-				const label=document.createElement('div');
+				const label=cE('div');
 				label.style.cssText='font-size:10px;color:#999;display:flex;justify-content:space-between;padding:0 2px;position:absolute;top:-24px;left:0;right:0;pointer-events:none;width:'+(rw*LED_PX_SIZE)+'px;';
 				label.innerHTML=`<span>${si}</span><span>${ei-1}</span>`;
 				wrap.appendChild(label);
 
-				const cv=document.createElement('canvas');
+				const cv=cE('canvas');
 				cv.width=rw*LED_PX_SIZE;
 				cv.height=LED_PX_SIZE;
 				cv.style.width=(rw*LED_PX_SIZE)+'px';
@@ -467,14 +554,6 @@
 
 		// update detail-rows when window size changes so they always fit
 		let resizeTmr;
-		window.addEventListener('resize', ()=>{
-			if (!is1D) return;
-			clearTimeout(resizeTmr);
-			resizeTmr = setTimeout(()=>{
-				const oldSel = selRow; createRowCanv(); drawAll();
-				if (oldSel < rowCanv.length) selRow = oldSel;
-			}, 100);
-		});
 
 		// coordinate transfrmations to match different canvas sizes
 		function getCoord(e,mode){
@@ -540,6 +619,7 @@
 			for(let i=1;i<w;i++){const px=i*PIXEL_SIZE;ctx.moveTo(px,0);ctx.lineTo(px,canv.height);}
 			for(let j=1;j<h;j++){const py=j*PIXEL_SIZE;ctx.moveTo(0,py);ctx.lineTo(canv.width,py);}
 			ctx.stroke();
+			if(onionEnabled&&animMode==='sm'&&animFrames.length)drawOnion();
 		}
 
 		function setPx(x,y,col,op=1,draw=true){
@@ -628,7 +708,7 @@
 			statusEl.textContent=prvEn?"Preview On":"Preview Off";
 			statusEl.style.background=prvEn?"#08d":"#a00";
 			if(prvEn){
-				const segId=+document.getElementById('seg').value;
+				const segId=+gId('seg').value;
 				curSeg=segs.find(s=>s.id===segId)||{id:segId,start:0};
 				reqJson({seg:{id:curSeg.id,frz:true}});
 				initWS();
@@ -651,16 +731,6 @@
 			paint(e,mode);
 			if(prvEn&&!prvTmr)paintCmp(); // start scheduler to monitor pixel changes and send them out
 		}
-
-		canv.addEventListener('pointerdown',e=>startPaint(e,'2d'));
-		canv.addEventListener('pointermove',e=>{e.preventDefault();if(painting)paint(e,'2d');});
-		canv.addEventListener('pointerleave',()=>{preview=lastPos=null;drawAll();});
-
-		canvPrev1D.addEventListener('pointerdown',e=>startPaint(e,'1d'));
-		canvPrev1D.addEventListener('pointermove',e=>{e.preventDefault();if(painting)paint(e,'1d');});
-		canvPrev1D.addEventListener('pointerleave',()=>{lastPos=null;drawAll();});
-
-		document.addEventListener('pointerup',endPaint);
 
 		async function endPaint(){
 			const wasPaint=painting;
@@ -838,12 +908,14 @@
 				chunk.push(d.idx,d.hex);
 				if(chunk.length>=maxColInd*2){
 					if(isRefresh&&painting)return;
+					if(!prvEn||!curSeg)return;
 					await reqJson({seg:{id:curSeg.id,i:chunk}});
 					chunk=[];
 					await new Promise(r=>setTimeout(r,interval));
 				}
 			}
 			if(chunk.length){
+				if(!prvEn||!curSeg)return;
 				await reqJson({seg:{id:curSeg.id,i:chunk}});
 				await new Promise(r=>setTimeout(r,interval));
 			}
@@ -868,48 +940,119 @@
 		}
 
 		function openImage(){
-			const f=document.getElementById('imgFile');
+			const f=gId('imgFile');
 			f.value='';
 			f.onchange=e=>{
 				const a=e.target.files[0];
 				if(!a)return;
-				const i=new Image();
-				i.onload=()=>{
-					offCanv.width=i.width;offCanv.height=i.height;
-					offCtx.drawImage(i,0,0,i.width,i.height);
-					const d=offCtx.getImageData(0,0,i.width,i.height).data;
-					if(is1D && (w*h == i.width*i.height || w*h == (i.width*i.height-1))){
-						// for 1D mode and "matching" image size, sample pixels from image starting from top-left to bottom-right
-						// note: the WLED image loader loads images for 1D the same way in 0.16+, this does not work with older versions
-						let j=0;
-						for(let y=0;y<i.height&&j<matrix.length;y++){
-							for(let x=0;x<i.width&&j<matrix.length;x++){
-								const p=(y*i.width+x)*4;
-								matrix[j++]={r:d[p],g:d[p+1],b:d[p+2]};
+				const reader=new FileReader();
+				reader.onload=ev=>{
+					const buf=new Uint8Array(ev.target.result);
+					// Check if it's a GIF
+					if(buf.length>6&&buf[0]===0x47&&buf[1]===0x49&&buf[2]===0x46){
+						try{
+							const gif=new window.GifReader(buf);
+							const nf=gif.numFrames();
+							if(nf>1){
+								// Animated GIF: load all frames with proper disposal handling
+								animFrames=[];
+								const gw=gif.width,gh=gif.height;
+								// Resize matrix to fit GIF dimensions if needed
+								if(gw!==w||gh!==h){
+									mW.value=gw;mH.value=gh;
+									updateMatrix();
+								}
+								// Canvas for compositing frames (handles disposal methods)
+								const cvs=cE('canvas');
+								cvs.width=gw;cvs.height=gh;
+								const c=cvs.getContext('2d');
+								// Previous canvas for disposal method 3 (restore to previous)
+								const prevCvs=cE('canvas');
+								prevCvs.width=gw;prevCvs.height=gh;
+								const prevCtx=prevCvs.getContext('2d');
+								for(let fi=0;fi<nf;fi++){
+									const info=gif.frameInfo(fi);
+									// Save current state before drawing (for disposal method 3)
+									prevCtx.clearRect(0,0,gw,gh);
+									prevCtx.drawImage(cvs,0,0);
+									// Decode frame onto temp buffer
+									const px=new Uint8ClampedArray(gw*gh*4);
+									gif.decodeAndBlitFrameRGBA(fi,px);
+									// Create temp canvas for this frame
+									const tmp=cE('canvas');
+									tmp.width=gw;tmp.height=gh;
+									const tctx=tmp.getContext('2d');
+									const idata=tctx.createImageData(gw,gh);
+									idata.data.set(px);
+									tctx.putImageData(idata,0,0);
+									// Draw frame onto main canvas at proper position
+									c.drawImage(tmp,info.x,info.y,info.width,info.height,info.x,info.y,info.width,info.height);
+									// Capture full canvas as frame
+									const fullPx=c.getImageData(0,0,gw,gh).data;
+									const delay=Math.max(10,info.delay*10)||200;
+									animFrames.push({pixels:new Uint8ClampedArray(fullPx),delay:delay});
+									// Apply disposal method for NEXT frame
+									// 0=unspecified, 1=do not dispose, 2=restore to background, 3=restore to previous
+									if(info.disposal===2){
+										// Restore to background: clear the frame rect
+										c.clearRect(info.x,info.y,info.width,info.height);
+									}else if(info.disposal===3){
+										// Restore to previous: restore canvas to state before this frame
+										c.clearRect(0,0,gw,gh);
+										c.drawImage(prevCvs,0,0);
+									}
+									// disposal 0 and 1: leave canvas as-is for next frame
+								}
+								// Enable stop-motion mode to show frames
+								if(animMode!=='sm')toggleSMMode();
+								updateSMFrameList();
+								showAnimPreview();
+								updateUploadVisibility();
+								// Load first frame into editor
+								loadSMFrame(0);
+								toast(`Loaded ${nf} frames from GIF`);
+								return;
 							}
-						}
-						updateMatrix(); // to redraw 1D views as we changed the offCanv
-					}else{
-						offCanv.width=w;offCanv.height=h;
-						offCtx.drawImage(i,0,0,w,h);
-						const d2=offCtx.getImageData(0,0,w,h).data;
-						for(let k=0;k<w*h;k++)matrix[k]={r:d2[k*4],g:d2[k*4+1],b:d2[k*4+2]};
+						}catch(err){console.error('GIF parse error:',err);}
 					}
-					drawAll();
-					if(prvEn)sendDirty();
+					// Fallback: load as static image
+					const blob=new Blob([buf],{type:a.type});
+					const i=new Image();
+					i.onload=()=>{
+						offCanv.width=i.width;offCanv.height=i.height;
+						offCtx.drawImage(i,0,0,i.width,i.height);
+						const d=offCtx.getImageData(0,0,i.width,i.height).data;
+						if(is1D && (w*h == i.width*i.height || w*h == (i.width*i.height-1))){
+							let j=0;
+							for(let y=0;y<i.height&&j<matrix.length;y++){
+								for(let x=0;x<i.width&&j<matrix.length;x++){
+									const p=(y*i.width+x)*4;
+									matrix[j++]={r:d[p],g:d[p+1],b:d[p+2]};
+								}
+							}
+							updateMatrix();
+						}else{
+							offCanv.width=w;offCanv.height=h;
+							offCtx.drawImage(i,0,0,w,h);
+							const d2=offCtx.getImageData(0,0,w,h).data;
+							for(let k=0;k<w*h;k++)matrix[k]={r:d2[k*4],g:d2[k*4+1],b:d2[k*4+2]};
+						}
+						drawAll();
+						if(prvEn)sendDirty();
+					};
+					i.src=URL.createObjectURL(blob);
 				};
-				i.src=URL.createObjectURL(a);
+				reader.readAsArrayBuffer(a);
 			};
 			f.click();
 		}
 
 		async function savePreset(e, colorReduction = 0) {
-			//console.log('Saving preset with color reduction:', colorReduction);
-			let fn=document.getElementById('fn').value.trim()||'mypaint';
+			let fn=gId('fn').value.trim()||'mypaint';
 			if(colorReduction) fn+='[reduced]';
 			if(!fn)return;
 			const colors = [];
-			const mask = (0xFF >> colorReduction) << colorReduction; // mask off lowest bit(s)
+			const mask = (0xFF >> colorReduction) << colorReduction;
 			// build color array with reduced color depth if needed: reduces json size by grouping similar colors
 			for(let i = 0; i < w*h; i++){
 				colors[i] = c2h(matrix[i].r & mask, matrix[i].g & mask, matrix[i].b & mask);
@@ -920,12 +1063,12 @@
 			let si=0,cur=colors[0];
 			for (let i = 1; i <= colors.length; i++) {
 				if(i===colors.length||colors[i]!==cur){
-					pattern.push(...(i - si === 1 ? [cur] : [si, i, cur])); // push single color or range
+					pattern.push(...(i - si === 1 ? [cur] : [si, i, cur]));
 					if (i < colors.length) { si = i; cur = colors[i]; }
 				}
 			}
 
-			const segData = JSON.parse(document.getElementById('seg').selectedOptions[0].dataset.segData || '{}');
+			const segData = JSON.parse(gId('seg').selectedOptions[0].dataset.segData || '{}');
 			try {
 				const presets = await (await fetch(getURL('/presets.json'))).json();
 				const nextId = Math.max(...Object.keys(presets).map(k => parseInt(k)).filter(n => !isNaN(n)), 0) + 1;
@@ -950,16 +1093,15 @@
 					})
 				})).json();
 
-				if (res.success) showToast(`Preset "${fn}" saved as ID ${nextId}`);
-				//if (res.success) showToast(`Preset "${fn}" saved as ID ${nextId}\n${pattern.length} elements (${colors.length} LEDs)${colorReduction ? ` (reduced ${colorReduction}x)` : ''}`); //debug
-				else throw new Error(); // handle as error below
+				if (res.success) toast(`Preset "${fn}" saved as ID ${nextId}`);
+				else throw new Error();
 			} catch (err) {
 				// lets assume the error is due to payload size (it usually is), reduce color depth and try again
-				if (colorReduction < 4) { // limit max reduction to 4 bits
-					showToast(`Preset too large, reducing colors`,true);
+				if (colorReduction < 4) {
+					toast(`Preset too large, reducing colors`,true);
 					return await savePreset(e, colorReduction + 1);
 				}
-				else showToast(`Error: ${err.message}`,true);
+				else toast(`Error: ${err.message}`,true);
 			}
 		}
 
@@ -1020,44 +1162,310 @@
 			return { w: best[0], h: best[1] };
 		}
 
-		// generate and upload gif
-		async function saveGIF() {
-			let fn = document.getElementById('fn').value.trim()||'mypaint';
-			if(!fn.endsWith('.gif')) fn += '.gif';
+		// shared: check for existing file, confirm overwrite, then upload blob (used by saveGIF and the animation exporter)
+		async function uploadBlob(blob,fn){
 			let exists=false;
 			try{
-				const r=await fetch(getURL('/edit?list=/')),data=await r.json();
-				exists=data.some(f=>f.name==="/"+fn&&f.name.toLowerCase().endsWith('.gif'));
-			}catch(e){console.error('Error fetching file list:',e);}
+				const r=await fetch(getURL('/edit?list=/'));
+				if(!r.ok) throw new Error('List fetch failed');
+				const data=await r.json();
+				if(!Array.isArray(data)) throw new Error('Invalid list response');
+				const target = fn.startsWith('/') ? fn : '/' + fn;
+				exists=data.some(f=>{
+					const n = (f.name !== undefined) ? f.name : f;
+					return n === target || n === fn || n === target.toLowerCase() || n === fn.toLowerCase();
+				});
+			}catch(e){
+				console.error('Error fetching file list:',e);
+				toast('Could not check existing files, proceeding anyway', true);
+			}
 			if(exists&&!confirm(`${fn} already exists. Do you want to overwrite it?`))return;
 			try{
-				const g = grid(w); // calculate optimal grid size: 1D image is saved as "2D gif" if w > 320 (WLED gif size limit), 2D can not be larger than 256x256 so is unchanged
-				let gw = g.w, gh = Math.max(g.h, h); // gif width and height
-				const pix=new Uint8Array(gw*gh*4);
-				for(let i=0;i<gw*gh;i++){
-					const c=matrix[i]||matrix[w*h-1]; // pad with last pixel if out of bounds
-					pix[i*4]=c.r;pix[i*4+1]=c.g;pix[i*4+2]=c.b;pix[i*4+3]=255;
-				}
-				const id=new ImageData(new Uint8ClampedArray(pix),gw,gh);
-				let{indexed,palette}=genPal(id.data);
-				const gifData=[],wr=new window.GifWriter(gifData,gw,gh,{loop:0,palette});
-				wr.addFrame(0,0,gw,gh,indexed);
-				wr.end();
-				const fU=new File([new Uint8Array(gifData)],fn,{type:'image/gif'});
 				const fd=new FormData();
-				fd.append('file',fU,fn);
+				// WLED /upload expects field name "data", not "file" (matches common.js uploadFile)
+				fd.append('data', new File([blob], fn, {type: 'image/gif'}), fn);
 				const r=await fetch(getURL('/upload'),{method:'POST',body:fd});
-				if(r.ok)showToast(`${fn} saved`);
-				else showToast('Upload failed',true);
-			}catch(e){showToast(`Error: ${e.message}`,true);}
-		};
+				if(r.ok)toast(`${esc(fn)} saved`);
+				else toast('Upload failed',true);
+			}catch(e){toast(`Error: ${e.message}`,true);}
+		}
 
-		// unfreeze segment when leaving the page unless freeze checkbox is checked
-		//window.addEventListener('beforeunload',()=>{
-		//	if(prvEn && !document.getElementById('frz').checked) reqJson({seg:{frz:false}});
-		//});
+		// generate and upload gif
+		async function saveGIF() {
+            let fn = gId('fn').value.trim()||'mypaint';
+            if(!fn.endsWith('.gif')) fn += '.gif';
+            try {
+                const g = grid(w);
+                let gw = g.w, gh = Math.max(g.h, h);
+                const pix=new Uint8Array(gw*gh*4);
+                for(let i=0;i<gw*gh;i++){
+                    const c=matrix[i]||matrix[w*h-1];
+                    pix[i*4]=c.r;pix[i*4+1]=c.g;pix[i*4+2]=c.b;pix[i*4+3]=255;
+                }
+                const id=new ImageData(new Uint8ClampedArray(pix),gw,gh);
+                let{indexed,palette}=genPal(id.data);
+                const gifData=[],wr=new window.GifWriter(gifData,gw,gh,{loop:0,palette});
+                wr.addFrame(0,0,gw,gh,indexed);
+                wr.end();
+                await uploadBlob(new Blob([new Uint8Array(gifData)],{type:'image/gif'}),fn);
+            } catch(e) {
+                toast(`Error: ${e.message}`,true);
+            }
+        }
 
-		function showToast(message,e=false) {
+		// ===== ANIMATION =====
+		// captures the current painting as a flat RGBA pixel buffer, same layout genPal/GifWriter expect
+		function captureMatrix(){
+			const p=new Uint8ClampedArray(w*h*4);
+			for(let i=0;i<w*h;i++){const c=matrix[i];p[i*4]=c.r;p[i*4+1]=c.g;p[i*4+2]=c.b;p[i*4+3]=255;}
+			return p;
+		}
+
+		function toggleSMMode(){
+			const smOn=animMode!=='sm';
+			animMode=smOn?'sm':'rec';
+			gId('smBtn').classList.toggle('selected',smOn);
+			gId('smPanel').classList.toggle('visible',smOn);
+			gId('smControls').style.display=smOn?'':'none';
+			gId('smFrameList').style.display=smOn?'':'none';
+			gId('durWrap').style.display=smOn?'':'none';
+			gId('recWrap').style.display=smOn?'none':'';
+			updateSMFrameList();
+			if(!smOn){
+				gId('smOnion').checked=false;setOnion(false);
+			}
+			if(isRecording&&smOn)pauseRecord();
+		}
+
+		function toggleRecord(){
+			if(animMode!=='rec'){animMode='rec';gId('smBtn').classList.remove('selected');gId('smPanel').classList.remove('visible');gId('smControls').style.display='none';gId('smFrameList').style.display='none';gId('durWrap').style.display='none';gId('recWrap').style.display='';}
+			isRecording?pauseRecord():resumeRecord();
+		}
+
+		// records at a fixed 20fps; identical consecutive frames are merged (delay accumulated) instead of stored, keeping file size down
+		function resumeRecord(){
+			isRecording=true;
+			gId('recBtn').textContent='⏹ Stop';
+			gId('recBtn').classList.add('recording');
+			if(!animFrames.length){gId('animPrvArea').style.display='none';gId('animClrArea').style.display='none';}
+			stopAnimPreview();
+			updateUploadVisibility();
+			let lastPix=animFrames.length?new Uint8ClampedArray(animFrames[animFrames.length-1].pixels):null;
+			const iv=Math.round(1000/(gId('recFps').value)||25);
+			recIntervalId=setInterval(()=>{
+				const pix=captureMatrix();
+				if(lastPix&&pix.every((v,i)=>v===lastPix[i])){
+					if(animFrames.length&&!playAsRec)animFrames[animFrames.length-1].delay+=iv;
+				}else{
+					animFrames.push({pixels:pix,delay:playAsRec?iv:0});
+					if(!playAsRec&&animFrames.length>1)animFrames[animFrames.length-2].delay=Math.max(iv,animFrames[animFrames.length-2].delay);
+					lastPix=new Uint8ClampedArray(pix);
+				}
+			},iv);
+		}
+
+		function pauseRecord(){
+			clearInterval(recIntervalId);recIntervalId=null;isRecording=false;
+			gId('recBtn').textContent='● Record';
+			gId('recBtn').classList.remove('recording');
+			if(animFrames.length){showAnimPreview();gId('animClrArea').style.display='';}
+			updateUploadVisibility();
+		}
+
+		// stop-motion: adds the current painting as one frame, displayed for the given duration
+		function addSMFrame(){
+			const dur=Math.max(10,parseInt(gId('smDur').value)||200);
+			animFrames.push({pixels:captureMatrix(),delay:dur});
+			lastAnimBlob=null;selFrameIdx=-1;updateSMFrameList();showAnimPreview();
+			gId('updBtn').disabled=true;gId('insBtn').disabled=true;
+			updateUploadVisibility();
+		}
+
+		function deleteSMFrame(i){
+			animFrames.splice(i,1);lastAnimBlob=null;
+			if(selFrameIdx===i){selFrameIdx=-1;gId('updBtn').disabled=true;gId('insBtn').disabled=true;}
+			else if(selFrameIdx>i)selFrameIdx--;
+			updateSMFrameList();
+			if(!animFrames.length){gId('animPrvArea').style.display='none';gId('animClrArea').style.display='none';stopAnimPreview();}
+			else showAnimPreview();
+			drawAll();
+			updateUploadVisibility();
+		}
+
+		function updateSMFrameList(){
+			gId('smFrameList').innerHTML=animFrames.map((f,i)=>
+				`<div class="frame-item${i===selFrameIdx?' selected':''}" onclick="loadSMFrame(${i})">F${i+1} <span style="color:#08d">${f.delay}ms</span><button class="btn del-f" onclick="event.stopPropagation();deleteSMFrame(${i})">\u2715</button></div>`
+			).join('');
+		}
+
+		function setOnion(on){onionEnabled=on;drawAll();}
+		function setPingPong(on){pingPong=on;if(animFrames.length)showAnimPreview();}
+		function setPlayAsRec(on){playAsRec=on;}
+
+		// overlays the last saved stop-motion frame at low opacity so the next frame can be aligned to it
+		function drawOnion(){
+			let srcIdx=selFrameIdx>=0?selFrameIdx-1:animFrames.length-1;
+			if(srcIdx<0||srcIdx>=animFrames.length)return;
+			const prev=animFrames[srcIdx].pixels;
+			const tmp=cE('canvas');tmp.width=w;tmp.height=h;
+			tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(prev),w,h),0,0);
+			ctx.save();ctx.globalCompositeOperation='lighter';ctx.imageSmoothingEnabled=false;
+			ctx.drawImage(tmp,0,0,canv.width,canv.height);
+			ctx.restore();
+		}
+
+		// plays back the captured frames in a small preview canvas using each frame's own delay
+		function showAnimPreview(){
+			if(!animFrames.length)return;
+			gId('animPrvArea').style.display='';
+			gId('animClrArea').style.display='';
+			const g=grid(w),gw=g.w,gh=Math.max(g.h,h);
+			const prvCanv=gId('animPrv');
+			const scale=Math.max(1,Math.floor(200/Math.max(gw,gh)));
+			prvCanv.width=gw*scale;
+			// stretch 1D previews to a visible height (40 px desktop / 50 px touch)
+			prvCanv.height=is1D?Math.max(gh*scale,('ontouchstart' in window || navigator.maxTouchPoints > 0)?50:40):gh*scale;
+			const ms=animFrames.reduce((s,f)=>s+f.delay,0);
+			gId('animInfo').textContent=`${animFrames.length} frames \u00b7 ${(ms/1000).toFixed(2)}s`;
+			stopAnimPreview();
+			const pCtx=prvCanv.getContext('2d');pCtx.imageSmoothingEnabled=false;
+			const tmp=cE('canvas');tmp.width=gw;tmp.height=gh;
+			const tctx=tmp.getContext('2d');
+			let idx=0,dir=1;
+			function tick(){
+				if(!animFrames.length)return;
+				const frm=animFrames[idx];
+				const imgData=tctx.createImageData(gw,gh);
+				for(let i=0;i<gw*gh;i++){const s=(i<w*h?i:w*h-1)*4;imgData.data[i*4]=frm.pixels[s];imgData.data[i*4+1]=frm.pixels[s+1];imgData.data[i*4+2]=frm.pixels[s+2];imgData.data[i*4+3]=255;}
+				tctx.putImageData(imgData,0,0);pCtx.drawImage(tmp,0,0,prvCanv.width,prvCanv.height);
+				animPrvTimer=setTimeout(tick,frm.delay);
+				if(pingPong&&animFrames.length>1){idx+=dir;if(idx>=animFrames.length-1||idx<=0)dir=-dir;}
+				else{idx=(idx+1)%animFrames.length;}
+			}
+			tick();
+		}
+
+		function stopAnimPreview(){clearTimeout(animPrvTimer);animPrvTimer=null;}
+
+		function clearAnim(){
+			if(!confirm('Clear animation frames?'))return;
+			if(isRecording){clearInterval(recIntervalId);recIntervalId=null;isRecording=false;gId('recBtn').textContent='● Record';gId('recBtn').classList.remove('recording');}
+			animFrames=[];lastAnimBlob=null;selFrameIdx=-1;stopAnimPreview();
+			gId('animPrvArea').style.display='none';
+			gId('animClrArea').style.display='none';
+			updateSMFrameList();drawAll();updateUploadVisibility();
+		}
+
+		function updateUploadVisibility(){
+			const has = animFrames.length > 0;
+			gId('savePreset').style.display = has ? 'none' : '';
+			gId('saveGIF').style.display   = has ? 'none' : '';
+			gId('animClrArea').style.display = has ? '' : 'none';
+			gId('applyAllBtn').disabled = !has;
+		}
+
+		// builds the animated gif using the same bounding-box differential encoding as saveGIF's palette logic (median-cut genPal),
+		// plus per-frame delay: identical consecutive frames are merged (delay accumulated) rather than stored twice
+		function loadSMFrame(i){
+			if(i<0||i>=animFrames.length)return;
+			selFrameIdx=i;
+			const p=animFrames[i].pixels;
+			for(let j=0;j<w*h;j++){matrix[j]={r:p[j*4],g:p[j*4+1],b:p[j*4+2]};}
+			drawAll();
+			updateSMFrameList();
+			gId('updBtn').disabled=false;
+			gId('insBtn').disabled=false;
+		}
+
+		function updateSMFrame(all = false) {
+			const dur = Math.max(10, parseInt(gId('smDur').value) || 200);
+			// update all, only updates the frame duration
+			if (all) {
+				if (!animFrames.length) return;
+				animFrames.forEach(f => f.delay = dur);
+				toast(`Set ${dur}ms for all ${animFrames.length} frames`);
+			} else {
+				if (selFrameIdx < 0) return;
+				animFrames[selFrameIdx].pixels = captureMatrix();
+				animFrames[selFrameIdx].delay = dur;
+			}
+			lastAnimBlob = null;
+			updateSMFrameList();
+			showAnimPreview();
+	}
+
+		function insertSMFrame(){
+			if(selFrameIdx<0)return;
+			const dur=Math.max(10,parseInt(gId('smDur').value)||200);
+			animFrames.splice(selFrameIdx,0,{pixels:captureMatrix(),delay:dur});
+			lastAnimBlob=null;
+			updateSMFrameList();
+			showAnimPreview();
+			updateUploadVisibility();
+		}
+
+		function buildAnimGif(){
+			if(!animFrames.length){toast('No frames',true);return null;}
+			// If ping-pong is enabled, create a reversed copy of frames (excluding last to avoid duplicate)
+			let exportFrames=animFrames;
+			if(pingPong&&animFrames.length>1){
+				exportFrames=animFrames.concat(animFrames.slice(0,-1).reverse());
+			}
+			const g=grid(w),gw=g.w,gh=Math.max(g.h,h),ppf=gw*gh;
+			const all=new Uint8Array(exportFrames.length*ppf*4);
+			exportFrames.forEach((frm,fi)=>{
+				const off=fi*ppf*4;
+				for(let i=0;i<ppf;i++){const s=(i<w*h?i:w*h-1)*4;all[off+i*4]=frm.pixels[s];all[off+i*4+1]=frm.pixels[s+1];all[off+i*4+2]=frm.pixels[s+2];all[off+i*4+3]=255;}
+			});
+			const{indexed,palette}=genPal(all);
+			const fidx=exportFrames.map((_,fi)=>indexed.subarray(fi*ppf,(fi+1)*ppf));
+
+			// merge consecutive identical indexed frames by accumulating delay (gif delay is per-frame, no need for dummy frames)
+			const merged=[{idx:fidx[0],delay:exportFrames[0].delay}];
+			for(let i=1;i<fidx.length;i++){
+				let same=true;
+				for(let j=0;j<ppf&&same;j++)same=fidx[i][j]===fidx[i-1][j];
+				if(same)merged[merged.length-1].delay+=exportFrames[i].delay;
+				else merged.push({idx:fidx[i],delay:exportFrames[i].delay});
+			}
+
+			const gd=[],wr=new window.GifWriter(gd,gw,gh,{palette,loop:0});
+			wr.addFrame(0,0,gw,gh,merged[0].idx,{delay:Math.max(1,Math.round(merged[0].delay/10)),disposal:1});
+			for(let i=1;i<merged.length;i++){
+				const curr=merged[i].idx,prev=merged[i-1].idx;
+				let x0=gw,y0=gh,x1=0,y1=0;
+				for(let y=0;y<gh;y++)for(let x=0;x<gw;x++)if(curr[y*gw+x]!==prev[y*gw+x]){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+				const fw=x1-x0+1,fh=y1-y0+1,region=new Uint8Array(fw*fh);
+				for(let y=0;y<fh;y++)for(let x=0;x<fw;x++)region[y*fw+x]=curr[(y0+y)*gw+(x0+x)];
+				wr.addFrame(x0,y0,fw,fh,region,{delay:Math.max(1,Math.round(merged[i].delay/10)),disposal:1});
+			}
+			wr.end();
+			return new Blob([new Uint8Array(gd)],{type:'image/gif'});
+		}
+
+		function getAnimBlob(){if(!lastAnimBlob)lastAnimBlob=buildAnimGif();return lastAnimBlob;}
+
+		function downloadAnimGif(){
+			const blob=getAnimBlob();if(!blob)return;
+			const fn=(gId('fn').value.trim()||'mypaint')+'.gif';
+			const url=URL.createObjectURL(blob);
+			const a=cE('a');a.href=url;a.download=fn;a.click();
+			URL.revokeObjectURL(url);
+		}
+
+		async function uploadAnimGif(){
+			try {
+				lastAnimBlob = null; // force rebuild so we never upload stale data
+				const blob=getAnimBlob();
+				if(!blob) return;
+				await uploadBlob(blob,(gId('fn').value.trim()||'mypaint')+'.gif');
+			} catch(e) {
+				toast(`Error: ${e.message}`,true);
+			}
+		}
+
+		// note: deliberately not using showToast() from common.js to keep it independent from future upstream changes, it also requires almost the same amount of code in CSS
+		function toast(message,e=false) {
 			const toast = document.createElement('div');
 			Object.assign(toast.style, {
 				position: 'fixed', bottom: '20px', right: '20px',
@@ -1068,7 +1476,6 @@
 			document.body.appendChild(toast);
 			setTimeout(() => toast.remove(), 5000);
 		}
-
 	</script>
 </body>
 </html>
