@@ -196,6 +196,11 @@ button.sml {
 	margin: 10px auto;
 	display: block;
 }
+.dialog h3 { margin-top: 0; }
+.dialog .btns { display: flex; gap: 10px; justify-content: center; margin-top: 15px; }
+.dialog .prow label { min-width: 60px; }
+.dialog .prow input:not([type="checkbox"]) { flex: 1; margin: 0; }
+.dialog input[type="checkbox"] { width: auto; display: inline-block; margin: 0; }
 
 .vctrl {
 	display: flex;
@@ -455,44 +460,47 @@ input[type="color"] {
 </div>
 
 <div class="dialog" id="saveDlg">
-	<h3 style="margin-top:0;">Save Video Preset</h3>
+	<h3>Save Video Preset</h3>
 	<label>Name (max 32 chars):</label>
 	<input type="text" id="pname" maxlength="32" placeholder="Enter a name...">
-	<div class="btns" style="display:flex;gap:10px;justify-content:center;margin-top:15px;">
+	<div class="btns">
 		<button class="btn" id="saveOk">Save</button>
 		<button class="btn" id="saveCn">Cancel</button>
 	</div>
 </div>
 
 <div class="dialog" id="expDlg">
-	<h3 style="margin-top:0;">Export GIF</h3>
+	<h3>Export GIF</h3>
 	<div style="max-width:300px;margin:0 auto;">
-		<div style="display:flex;align-items:center;gap:8px;margin:8px 0;">
-			<label style="min-width:60px;">Name:</label>
-			<input type="text" id="gname" maxlength="32" placeholder="myvideo" style="flex:1;margin:0;">
+		<div class="prow">
+			<label>Name:</label>
+			<input type="text" id="gname" maxlength="32" placeholder="myvideo">
 		</div>
-		<div style="display:flex;align-items:center;gap:8px;margin:8px 0;">
-			<label style="min-width:60px;">FPS:</label>
-			<input type="number" id="gfps" value="20" min="0.01" max="33" step="1"
-				style="flex:1;background:#555;color:#fff;border-radius:6px;padding:6px;margin:0;" />
+		<div class="prow">
+			<label>FPS:</label>
+			<input type="number" id="gfps" value="20" min="0.01" max="33" step="1" style="border-radius:6px;padding:6px;">
 		</div>
-		<div style="display:flex;align-items:center;gap:8px;margin:8px 0;">
-			<label style="min-width:60px;">Colors:</label>
-			<input type="range" id="cdepth" min="4" max="8" step="1" value="8" class="slider" style="flex:1;margin:0;">
+		<div class="prow" style="justify-content:center;">
+			<input type="checkbox" id="ggamma" checked>
+			<label for="ggamma" style="text-align:left;">Use gamma correction</label>
+		</div>
+		<div class="prow">
+			<label>Colors:</label>
+			<input type="range" id="cdepth" min="4" max="8" step="1" value="8" class="slider">
 			<span id="colLbl" style="min-width:40px;text-align:right;">256</span>
 		</div>
 	</div>
-	<div class="btns" style="display:flex;gap:10px;justify-content:center;margin-top:15px;">
+	<div class="btns">
 		<button class="btn" id="expOk">Export</button>
 		<button class="btn" id="expCn">Cancel</button>
 	</div>
 </div>
 
 <div class="dialog" id="resDlg">
-	<h3 style="margin-top:0;">GIF Ready</h3>
+	<h3>GIF Ready</h3>
 	<img id="gifPrv" style="margin:10px auto;image-rendering:pixelated;border:1px solid #555;border-radius:8px;display:none;">
 	<p id="gifInf"></p>
-	<div class="btns" style="display:flex;gap:10px;justify-content:center;margin-top:15px;">
+	<div class="btns">
 		<button class="btn" id="gifUp">Upload</button>
 		<button class="btn" id="gifDl">Download</button>
 		<button class="btn" id="gifCn">Cancel</button>
@@ -516,6 +524,7 @@ let rgbBuf = null, lut = new Uint8ClampedArray(256), thr = 0, bgc = [0,0,0], bri
 let wu = '', ws = null, mw = 32, mh = 32;
 let crop = {x:50, y:50, w:200, h:150}, drag=false, hand=null, offX=0, offY=0;
 let vInp = null;
+let isUrlSrc = false; // true when current video was loaded from an online URL (not a local file)
 let vRect = {x:0, y:0, w:0, h:0};
 let keepSend = true;
 
@@ -692,6 +701,7 @@ function stopVid(){
 // --- Start capture ---
 function startCap(isUrl){
 	gId('editor').classList.add('active');
+	isUrlSrc = !!isUrl;
 
 	const asp = vid.videoHeight / vid.videoWidth;
 	const pw = 800, ph = 600;
@@ -1303,6 +1313,7 @@ let gifBlob, gifName;
 
 gId('expGif').onclick = () => {
 	if(!vInp){ msg('No video loaded', 'error'); return; }
+	if(isUrlSrc){ alert('Converting online sources directly can fail'); }
 	if(!vid.duration || isNaN(vid.duration)){ msg('Video metadata not ready', 'error'); return; }
 
 	const wasPlay = !vid.paused;
@@ -1311,6 +1322,7 @@ gId('expGif').onclick = () => {
 	gId('gname').value = 'myvideo';
 	gId('gfps').value = 20;
 	gId('cdepth').value = 8; gId('colLbl').textContent = '256';
+	gId('ggamma').checked = true;
 	gId('expDlg').classList.add('active');
 
 	const expOk = gId('expOk'), expCn = gId('expCn');
@@ -1396,7 +1408,7 @@ async function capGifFrame(tctx, mw, mh) {
     tctx.fillRect(0, 0, mw, mh);
     tctx.drawImage(vid, cx, cy, cw, ch, 0, 0, mw, mh);
     const fd = tctx.getImageData(0, 0, mw, mh);
-    applyFilt(fd, false);
+    applyFilt(fd, gId('ggamma').checked);
     return new Uint8ClampedArray(fd.data);
 }
 
