@@ -6,12 +6,7 @@
 <meta name="author" content="@dedehai">
 <meta name="license" content="EUPL v. 1.2 or later">
 <link rel="shortcut icon" href="favicon.ico">
-<link rel="stylesheet" href="style.css">
 <title>WLED VideoLab</title>
-
-<!-- omggif from CDN for GIF export (used to build indexed GIFs) -->
-<script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
-<script src="common.js"></script>
 <style>
 body {
 	font-family: Verdana, sans-serif;
@@ -365,7 +360,7 @@ input[type="color"] {
 </style>
 </head>
 <body>
-<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v0.92beta</div>
+<div style="position:absolute;top:0px;left:10px;font-size:10px;color:#666;">v1.0</div>
 <div class="cont">
 	<div class="title">WLED <span class="rb">VideoLab</span></div>
 
@@ -381,7 +376,7 @@ input[type="color"] {
 	<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
 		<div style="flex-basis:100%;">Play from CORS enabled URL (like pixabay.com):</div>
 		<input type="text" id="url">
-		<button class="sml" id="loadU" title="Play URL">▶</button>
+		<button class="sml" id="loadU">▶</button>
 	</div>
 	<div class="presets" id="prests" style="display:none;">
 		<h3>Saved Video Presets</h3>
@@ -413,9 +408,9 @@ input[type="color"] {
 				</div>
 				<div class="brow">
 					<div class="bcont">
-						<button id="play" class="sml" title="Play/Pause">⏸</button>
-						<button id="mute" class="sml" title="Mute/unmute">🔊</button>
-						<button id="stop" class="sml" title="Stop">⏹</button>
+						<button id="play" class="sml">⏸</button>
+						<button id="mute" class="sml">🔊</button>
+						<button id="stop" class="sml">⏹</button>
 					</div>
 					<div class="spcont">
 						<input type="range" id="speed" min="0.1" max="4" step="0.1" value="1">
@@ -449,12 +444,12 @@ input[type="color"] {
 		</div>
 		<div class="exrow">
 			<button class="btn" id="saveP" style="display:none;">Save Video Preset</button>
-			<button class="btn" id="expGif" style="display:none;" title="Export preview as GIF">Export GIF</button>
+			<button class="btn" id="expGif" style="display:none;">Export GIF</button>
 		</div>
 	</div>
 
 	<div style="text-align:center;margin:20px 0">
-		<button class="btn" onclick="window.location.href=wu">Back to the controls</button>
+		<button class="btn" onclick="window.location.href=getURL('/')">Back to Controls</button>
 	</div>
 	<div style="font-size:12px;color:#666;">by @dedehai</div>
 </div>
@@ -521,7 +516,7 @@ const dsCvs = document.createElement('canvas'); // offscreen downscale canvas fo
 const dsCtx = dsCvs.getContext('2d', {willReadFrequently:true});
 let rgbBuf = null, lut = new Uint8ClampedArray(256), thr = 0, bgc = [0,0,0], bri = 1; // buffers/variables for faster color processing
 
-let wu = '', ws = null, mw = 32, mh = 32;
+ws = null, mw = 32, mh = 32;
 let crop = {x:50, y:50, w:200, h:150}, drag=false, hand=null, offX=0, offY=0;
 let vInp = null;
 let isUrlSrc = false; // true when current video was loaded from an online URL (not a local file)
@@ -547,19 +542,31 @@ const lRegn = gId('lregn');
 const lSt = gId('lstart');
 const lEd = gId('lend');
 let mDrag = null;
+let is8266 = false, canStream = false; // variables for compatibility check
 
-// --- Initialization ---
-(async()=>{
-	getLoc();
-	const params = new URLSearchParams(window.location.search);
-	wu = `http://${params.get('host')||window.location.host}`;
-	ws = connectWs(()=>console.log('WS connected'));
-	await loadSize();
-	loadGamma();
-	buildLUT();
-	loadPresets();
+// load external resources in sequence to avoid 503 errors if heap is low, repeats indefinitely until loaded
+(function loadFiles() {
+	const s = document.createElement('script');
+	s.src = 'common.js';
+	s.onerror = () => setTimeout(loadFiles, 100);
+	s.onload = async () => {
+		try {
+			getLoc(); // set up loc/locip for getURL() before any fetch (file mode / reverse proxy)
+			await loadSize(); // loads info.json and sets parameters indluding is8266
+		} catch(e){}
+		const resources = ['style.css'];
+		if (!is8266) resources.push('omggif.js'); // omggif is not available on ESP8266
+		loadResources(resources, init);
+	};
+	document.head.appendChild(s);
 })();
 
+async function init() {
+    ws = connectWs(()=>console.log('WS connected'));
+    loadGamma();
+    buildLUT();
+    loadPresets();
+}
 // --- UI message + overlay helpers ---
 function msg(txt, typ){
 	const el = document.createElement('div');
@@ -587,7 +594,9 @@ function ovHide(){
 async function loadSize(){
 	const matrixsize = gId('mt'); // matrix size
 	try{
-		const r = await fetch(`${wu}/json/info`), j = await r.json();
+		const r = await fetch(getURL('/json/info')), j = await r.json();
+		is8266 = j.arch === 'esp8266';
+		canStream = typeof sendDDP === 'function' && (!is8266 || /\(.*,.*,.*,.*,/.test(sendDDP)); // check if DDP sending is supported (count parameters for ESP8266 support)
 		if(j.leds.matrix && j.leds.matrix.w && j.leds.matrix.h){
 			const {w, h} = j.leds.matrix;
 			matrixsize.textContent = `Target Matrix: ${w}x${h}`;
@@ -688,6 +697,7 @@ function stopVid(){
   if (vfcHandle){ try { vid.cancelVideoFrameCallback(vfcHandle); } catch(e){} vfcHandle = null; }
   if (loopInt){ clearInterval(loopInt); loopInt = null; }
   keepSend = false;
+	capBusy = false; 
 
   if (vid.src){
     const old = vid.src;
@@ -726,7 +736,7 @@ function startCap(isUrl){
 
 	gId('vctrl').style.display = 'flex';
 	gId('saveP').style.display = isUrl ? 'inline-block' : 'none';
-	gId('expGif').style.display = 'inline-block';
+	if (!is8266) gId('expGif').style.display = 'inline-block'; // gif not supported on ESP8266
 
 	if(vid.duration && !isNaN(vid.duration)){
 		lEnd = vid.duration;
@@ -805,7 +815,7 @@ async function capFrame(){
   if(capBusy || !vid.videoWidth) return;
   capBusy = true;
   try{
-    await updateDownscale(); // draw one downscaled frame to capture from
+    updateDownscale(); // draw one downscaled frame to capture from
 		updPrev();
     const cx = (crop.x - vRect.x) / vRect.w * dsCvs.width;
     const cy = (crop.y - vRect.y) / vRect.h * dsCvs.height;
@@ -828,14 +838,17 @@ async function capFrame(){
     pvx.drawImage(capCvs, 0, 0, mw, mh, 0, 0, pv.width, pv.height);
 
 		const now = performance.now();
-    if (ws && ws.readyState === 1 && !sendBusy &&
-			  (now - lastSend) >= CAP_INT &&
-				ws.bufferedAmount < QUEUE_MAX) {
-      sendBusy = true;
-      lastSend = now;
-      sendDDP(ws, 0, mw*mh, rgbBuf);
-      sendBusy = false;
-    }
+		if (!canStream) msg('Streaming not supported, update WLED','error');
+		else if (ws && ws.readyState === 1 && !sendBusy && (now - lastSend) >= CAP_INT && ws.bufferedAmount < QUEUE_MAX) {
+			sendBusy = true; 
+			lastSend = now;
+			try {
+				sendDDP(ws, 0, mw*mh, rgbBuf, is8266);
+			} catch(e) {} 
+			finally {
+				sendBusy = false;
+			}
+		}
   } catch(e){ console.error(e); sendBusy = false; }
   capBusy = false;
 }
@@ -867,28 +880,6 @@ const vw = vid.videoWidth, vh = vid.videoHeight;
   dsCtx.imageSmoothingEnabled = false;
   dsCtx.drawImage(vid, 0, 0, vw, vh, 0, 0, dsCvs.width, dsCvs.height);
 }
-/*
-// downscale with createImageBitmap (seems to be slower)
-async function updateDownscale(){
-  const vw = vid.videoWidth, vh = vid.videoHeight;
-  if (!vw || !vh) return;
-
-  let w = vw, h = vh;
-  if (w > DS_MAX_W) { h *= DS_MAX_W / w; w = DS_MAX_W; }
-  if (h > DS_MAX_H) { w *= DS_MAX_H / h; h = DS_MAX_H; }
-  dsCvs.width  = Math.max(1, Math.round(w));
-  dsCvs.height = Math.max(1, Math.round(h));
-
-  // bitmap resize + draw into dsCvs
-  const bmp = await createImageBitmap(
-    vid, 0, 0, vw, vh,
-    { resizeWidth: dsCvs.width, resizeHeight: dsCvs.height, resizeQuality: 'pixelated' }
-  );
-  //dsCtx.imageSmoothingEnabled = false;
-  //dsCtx.clearRect(0,0,dsCvs.width, dsCvs.height);
-  dsCtx.drawImage(bmp, 0, 0, dsCvs.width, dsCvs.height);
-  bmp.close();
-}*/
 
 function updPrev(){
   ctx.drawImage(dsCvs, 0, 0, dsCvs.width, dsCvs.height, vRect.x, vRect.y, vRect.w, vRect.h);
@@ -1102,13 +1093,13 @@ function applyPreset(p){
 
 	updPrev();
 	gId('saveP').style.display = 'inline-block';
-	gId('expGif').style.display = 'inline-block';
+	if (!is8266) gId('expGif').style.display = 'inline-block'; // gif not supported on ESP8266
 }
 
 function addPreset(plist) {
 	const url = gId('url').value.trim();
 	const p = {
-		name: gId('pname')?.value || '',
+		name: gId('pname').value || '',
 		...(url && !url.startsWith('blob:') ? {url} : {}),
 		crop: {...crop},
 		mute: vid.muted,
@@ -1375,7 +1366,7 @@ gId('gifUp').onclick = async () => {
 	try {
 		const fd = new FormData();
 		fd.append('file', gifBlob, gifName + '.gif');
-		const r = await fetch(`${wu}/upload`, { method: 'POST', body: fd });
+		const r = await fetch(getURL('/upload'), { method: 'POST', body: fd });
 		if (r.ok) {
 			gId('gifPrv').style.display = 'none';
 			msg('Uploaded');
@@ -1534,13 +1525,13 @@ async function expGif(nm, fps, maxCols) {
 	}
 	wr.end();
 
-	const gifBlob = new Blob([new Uint8Array(gd)], { type: 'image/gif' });
+	const gblob = new Blob([new Uint8Array(gd)], { type: 'image/gif' });
 	const duration = dlys.reduce((sum, d) => sum + d, 0) / 100;
 
 	try { vid.currentTime = savT; } catch(e) {}
 	if (!wasPause) vid.play().catch(() => {});
 
-	return { blob: gifBlob, name: nm, frames: frames.length, duration };
+	return { blob: gblob, name: nm, frames: frames.length, duration };
 }
 </script>
 </body>
