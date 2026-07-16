@@ -962,10 +962,13 @@
 								// Animated GIF: load all frames with proper disposal handling
 								animFrames=[];
 								const gw=gif.width,gh=gif.height;
-								// Resize matrix to fit GIF dimensions if needed
-								if(gw!==w||gh!==h){
-									mW.value=gw;mH.value=gh;
-									updateMatrix();
+								// Resample GIF frames to current matrix dimensions if needed
+								const needsResize = (gw !== w || gh !== h);
+								const tmpCanvas = needsResize ? document.createElement('canvas') : null;
+								const tmpCtx = needsResize ? tmpCanvas.getContext('2d') : null;
+								if (needsResize) {
+									tmpCanvas.width = w;
+									tmpCanvas.height = h;
 								}
 								// Canvas for compositing frames (handles disposal methods)
 								const cvs=cE('canvas');
@@ -993,9 +996,17 @@
 									// Draw frame onto main canvas at proper position
 									c.drawImage(tmp,info.x,info.y,info.width,info.height,info.x,info.y,info.width,info.height);
 									// Capture full canvas as frame
-									const fullPx=c.getImageData(0,0,gw,gh).data;
-									const delay=Math.max(10,info.delay*10)||200;
-									animFrames.push({pixels:new Uint8ClampedArray(fullPx),delay:delay});
+									let framePx;
+									if (needsResize) {
+											// Resample to current w/h using drawImage scaling
+											tmpCtx.clearRect(0, 0, w, h);
+											tmpCtx.drawImage(cvs, 0, 0, gw, gh, 0, 0, w, h);
+											framePx = tmpCtx.getImageData(0, 0, w, h).data;
+									} else {
+											framePx = c.getImageData(0, 0, gw, gh).data;
+									}
+									const delay = Math.max(10, info.delay * 10) || 200;
+									animFrames.push({pixels: new Uint8ClampedArray(framePx), delay: delay});
 									// Apply disposal method for NEXT frame
 									// 0=unspecified, 1=do not dispose, 2=restore to background, 3=restore to previous
 									if(info.disposal===2){
