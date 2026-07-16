@@ -249,12 +249,11 @@
 					<button class="btn btn-sml" onclick="addSMFrame()">Add Frame</button>
 					<button class="btn btn-sml" id="updBtn" onclick="updateSMFrame()" disabled>Update Frame</button>
 					<button class="btn btn-sml" id="insBtn" onclick="insertSMFrame()" disabled>Insert Before</button>
-					</div>
-					<span id="durWrap" style="display:none">
-    				<label>Frame Duration: <input type="number" id="smDur" value="200" min="10" max="9999"> ms</label>
-    				<button class="btn btn-sml" id="applyAllBtn" onclick="updateSMFrame(true)"  disabled>Apply to All</button>
-					</span>
-			    </div></div>
+				</div>
+				<span id="durWrap" style="display:none">
+    			<label>Frame Duration: <input type="number" id="smDur" value="200" min="10" max="9999"> ms</label>
+    			<button class="btn btn-sml" id="applyAllBtn" onclick="updateSMFrame(true)"  disabled>Apply to All</button>
+				</span>
 			</div>
 		</div>
 	</div>
@@ -270,7 +269,6 @@
 		<div class="anim-row dim" style="margin-bottom:8px">
 			<span id="recWrap"><label>Record FPS: <input type="number" id="recFps" value="10" min="0.1" max="30"> </label>
 			<label><input type="checkbox" id="fixDurCheck" onchange="setPlayAsRec(this.checked)"> Auto Pause</label></span>
-	
 		</div>
 		<div class="sm-panel" id="smPanel">
 			<div class="anim-row" style="margin-bottom:8px">
@@ -287,8 +285,6 @@
 			<div id="animClrArea" style="display:none;text-align:center;margin-top:8px;">
 			    <button class="btn" onclick="clearAnim()">Clear frames</button>
 		    </div>
-			<button class="btn" id="dlGifBtn" onclick="downloadAnimGif()">Download GIF</button>
-			<button class="btn" id="upGifBtn" onclick="uploadAnimGif()">Upload to WLED</button>
 		</div>
 
 	</div>
@@ -319,22 +315,6 @@
 			{name:"Smear",   icon: "&#xf25a;"},  // smear hand f25a
 		];
 
-		// load external resources in sequence to avoid 503 errors if heap is low, repeats indefinitely until loaded
-		(function loadFiles() {
-			const s = document.createElement('script');
-			s.src = 'common.js';
-			s.onerror = () => setTimeout(loadFiles, 100);
-			s.onload = async () => {
-				fetch(getURL('/json/info')).then(r=>r.json()).then(inf=>{
-					is8266=inf.arch==='esp8266';
-				}).catch(()=>{});
-				const resources = ['iro.js'];
-				if (!is8266) resources.push('omggif.js'); // omggif is not available on ESP8266
-				loadResources(resources, init);
-			};
-			document.head.appendChild(s);
-		})();
-
 		let canv, ctx, canvPrev1D, ctxPrev1D, mW, mH, statusEl, wrapRowCont;
 		let w = DEFAULT_MATRIX, h = DEFAULT_MATRIX, matrix = [], segs = [], curSeg = null;
 		let painting = false, tool = 5, startPt = null, lastPos = null, preview = null;
@@ -348,8 +328,27 @@
 		let animFrames = [], animMode = 'rec', isRecording = false, recIntervalId = null, playAsRec = false;
 		let animPrvTimer = null, onionEnabled = false, lastAnimBlob = null, pingPong = false;
 		let selFrameIdx = -1;
+		let is8266 = false;
 
 		const c2h = (r,g,b)=>((r<<16)|(g<<8)|b).toString(16).padStart(6,'0').toUpperCase();
+
+		// load external resources in sequence to avoid 503 errors if heap is low, repeats indefinitely until loaded
+		(function loadFiles() {
+			const s = document.createElement('script');
+			s.src = 'common.js';
+			s.onerror = () => setTimeout(loadFiles, 100);
+			s.onload = async () => {
+				try {
+					const r = await fetch(getURL('/json/info'));
+					const inf = await r.json();
+					is8266 = inf.arch === 'esp8266';
+				} catch(e){}
+				const resources = ['iro.js'];
+				if (!is8266) resources.push('omggif.js'); // omggif is not available on ESP8266
+				loadResources(resources, init);
+			};
+			document.head.appendChild(s);
+		})();
 
 		// init function, reads current segments and puts them in the select list
 		async function init() {
@@ -466,7 +465,7 @@
 			} catch(e) { console.error(e); }
 			updateMatrix();
 			togglePreview();
-			updateUploadVisibility();
+			updButtons();
 		}
 
 		function updateMatrix() {
@@ -953,8 +952,8 @@
 				const reader=new FileReader();
 				reader.onload=ev=>{
 					const buf=new Uint8Array(ev.target.result);
-					// Check if it's a GIF
-					if(buf.length>6&&buf[0]===0x47&&buf[1]===0x49&&buf[2]===0x46){
+					// Check if it's a animated GIF if omggif is available
+					if(typeof window.GifReader !== 'undefined' && buf.length>6&&buf[0]===0x47&&buf[1]===0x49&&buf[2]===0x46){
 						try{
 							const gif=new window.GifReader(buf);
 							const nf=gif.numFrames();
@@ -1012,7 +1011,7 @@
 								if(animMode!=='sm')toggleSMMode();
 								updateSMFrameList();
 								showAnimPreview();
-								updateUploadVisibility();
+								updButtons();
 								// Load first frame into editor
 								loadSMFrame(0);
 								toast(`Loaded ${nf} frames from GIF`);
@@ -1197,26 +1196,36 @@
 
 		// generate and upload gif
 		async function saveGIF() {
-            let fn = gId('fn').value.trim()||'mypaint';
-            if(!fn.endsWith('.gif')) fn += '.gif';
-            try {
-                const g = grid(w);
-                let gw = g.w, gh = Math.max(g.h, h);
-                const pix=new Uint8Array(gw*gh*4);
-                for(let i=0;i<gw*gh;i++){
-                    const c=matrix[i]||matrix[w*h-1];
-                    pix[i*4]=c.r;pix[i*4+1]=c.g;pix[i*4+2]=c.b;pix[i*4+3]=255;
-                }
-                const id=new ImageData(new Uint8ClampedArray(pix),gw,gh);
-                let{indexed,palette}=genPal(id.data);
-                const gifData=[],wr=new window.GifWriter(gifData,gw,gh,{loop:0,palette});
-                wr.addFrame(0,0,gw,gh,indexed);
-                wr.end();
-                await uploadBlob(new Blob([new Uint8Array(gifData)],{type:'image/gif'}),fn);
-            } catch(e) {
-                toast(`Error: ${e.message}`,true);
-            }
-        }
+			let fn = gId('fn').value.trim()||'mypaint';
+			if(!fn.endsWith('.gif')) fn += '.gif';
+			try {
+				let blob;
+				if (animFrames.length > 0) {
+					// Animated GIF: use existing build logic
+					lastAnimBlob = null; // force rebuild
+					blob = getAnimBlob();
+					if (!blob) return; // getAnimBlob already toasts error
+				} else {
+					// Static GIF
+					const g = grid(w);
+					let gw = g.w, gh = Math.max(g.h, h);
+					const pix=new Uint8Array(gw*gh*4);
+					for(let i=0;i<gw*gh;i++){
+						const c=matrix[i]||matrix[w*h-1];
+						pix[i*4]=c.r;pix[i*4+1]=c.g;pix[i*4+2]=c.b;pix[i*4+3]=255;
+					}
+					const id=new ImageData(new Uint8ClampedArray(pix),gw,gh);
+					let{indexed,palette}=genPal(id.data);
+					const gifData=[],wr=new window.GifWriter(gifData,gw,gh,{loop:0,palette});
+					wr.addFrame(0,0,gw,gh,indexed);
+					wr.end();
+					blob = new Blob([new Uint8Array(gifData)],{type:'image/gif'});
+				}
+				await uploadBlob(blob, fn);
+			} catch(e) {
+				toast(`Error: ${e.message}`,true);
+			}
+		}
 
 		// ===== ANIMATION =====
 		// captures the current painting as a flat RGBA pixel buffer, same layout genPal/GifWriter expect
@@ -1254,7 +1263,7 @@
 			gId('recBtn').classList.add('recording');
 			if(!animFrames.length){gId('animPrvArea').style.display='none';gId('animClrArea').style.display='none';}
 			stopAnimPreview();
-			updateUploadVisibility();
+			updButtons();
 			let lastPix=animFrames.length?new Uint8ClampedArray(animFrames[animFrames.length-1].pixels):null;
 			const iv=Math.round(1000/(gId('recFps').value)||25);
 			recIntervalId=setInterval(()=>{
@@ -1274,7 +1283,7 @@
 			gId('recBtn').textContent='● Record';
 			gId('recBtn').classList.remove('recording');
 			if(animFrames.length){showAnimPreview();gId('animClrArea').style.display='';}
-			updateUploadVisibility();
+			updButtons();
 		}
 
 		// stop-motion: adds the current painting as one frame, displayed for the given duration
@@ -1283,7 +1292,7 @@
 			animFrames.push({pixels:captureMatrix(),delay:dur});
 			lastAnimBlob=null;selFrameIdx=-1;updateSMFrameList();showAnimPreview();
 			gId('updBtn').disabled=true;gId('insBtn').disabled=true;
-			updateUploadVisibility();
+			updButtons();
 		}
 
 		function deleteSMFrame(i){
@@ -1294,7 +1303,7 @@
 			if(!animFrames.length){gId('animPrvArea').style.display='none';gId('animClrArea').style.display='none';stopAnimPreview();}
 			else showAnimPreview();
 			drawAll();
-			updateUploadVisibility();
+			updButtons();
 		}
 
 		function updateSMFrameList(){
@@ -1354,25 +1363,32 @@
 
 		function clearAnim(){
 			if(!confirm('Clear animation frames?'))return;
-			if(isRecording){clearInterval(recIntervalId);recIntervalId=null;isRecording=false;gId('recBtn').textContent='● Record';gId('recBtn').classList.remove('recording');}
-			animFrames=[];lastAnimBlob=null;selFrameIdx=-1;stopAnimPreview();
+			if(isRecording) {
+				clearInterval(recIntervalId);
+				recIntervalId=null;
+				isRecording=false;
+				gId('recBtn').textContent='● Record';
+				gId('recBtn').classList.remove('recording');
+			}
+			animFrames=[];
+			lastAnimBlob=null;
+			selFrameIdx=-1;
+			stopAnimPreview();
 			gId('animPrvArea').style.display='none';
 			gId('animClrArea').style.display='none';
 			updateSMFrameList();
 			drawAll();
-			updateUploadVisibility();
+			updButtons();
 		}
 
-		function updateUploadVisibility(){
+		// update button visibility
+		function updButtons(){
 			const isAnimation = animFrames.length > 0; // multiple frames
 			// without gif support (esp8266, or omggif failed to load on esp32) only the preset option makes sense
-			gId('savePreset').style.display = (isAnimation && !is8266) ? 'none' : ''; // always show preset saving on 8266, it should not have any animation frames
+			gId('savePreset').style.display = isAnimation ? 'none' : ''; // can not save an animation as a preset
 			gId('animClrArea').style.display = isAnimation ? '' : 'none';
 			gId('applyAllBtn').disabled = !isAnimation;
-			// hide gif related buttons on ESP8266
-			gId('saveGIF').style.display   = (isAnimation || is8266) ? 'none' : '';
-			gId('dlGifBtn').style.display  = is8266 ? '' : 'none';
-			gId('upGifBtn').style.display  = is8266 ? '' : 'none';
+			gId('saveGIF').style.display   =  is8266 ? 'none' : ''; // hide gif button on ESP8266
 		}
 
 		// builds the animated gif using the same bounding-box differential encoding as saveGIF's palette logic (median-cut genPal),
@@ -1412,7 +1428,7 @@
 			lastAnimBlob=null;
 			updateSMFrameList();
 			showAnimPreview();
-			updateUploadVisibility();
+			updButtons();
 		}
 
 		function buildAnimGif(){
@@ -1454,25 +1470,9 @@
 			return new Blob([new Uint8Array(gd)],{type:'image/gif'});
 		}
 
-		function getAnimBlob(){if(!lastAnimBlob)lastAnimBlob=buildAnimGif();return lastAnimBlob;}
-
-		function downloadAnimGif(){
-			const blob=getAnimBlob();if(!blob)return;
-			const fn=(gId('fn').value.trim()||'mypaint')+'.gif';
-			const url=URL.createObjectURL(blob);
-			const a=cE('a');a.href=url;a.download=fn;a.click();
-			URL.revokeObjectURL(url);
-		}
-
-		async function uploadAnimGif(){
-			try {
-				lastAnimBlob = null; // force rebuild so we never upload stale data
-				const blob=getAnimBlob();
-				if(!blob) return;
-				await uploadBlob(blob,(gId('fn').value.trim()||'mypaint')+'.gif');
-			} catch(e) {
-				toast(`Error: ${e.message}`,true);
-			}
+		function getAnimBlob() {
+			if(!lastAnimBlob) lastAnimBlob=buildAnimGif();
+			return lastAnimBlob;
 		}
 
 		// note: deliberately not using showToast() from common.js to keep it independent from future upstream changes, it also requires almost the same amount of code in CSS
