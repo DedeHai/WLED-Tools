@@ -339,6 +339,7 @@
 			s.onerror = () => setTimeout(loadFiles, 100);
 			s.onload = async () => {
 				try {
+					getLoc(); // set up loc/locip for getURL() before any fetch (file mode / reverse proxy)
 					const r = await fetch(getURL('/json/info'));
 					const inf = await r.json();
 					is8266 = inf.arch === 'esp8266';
@@ -1216,7 +1217,7 @@
 					}
 					const id=new ImageData(new Uint8ClampedArray(pix),gw,gh);
 					let{indexed,palette}=genPal(id.data);
-					const gifData=[],wr=new window.GifWriter(gifData,gw,gh,{loop:0,palette});
+					const gifData=[],wr=new GifWriter(gifData,gw,gh,{loop:0,palette});
 					wr.addFrame(0,0,gw,gh,indexed);
 					wr.end();
 					blob = new Blob([new Uint8Array(gifData)],{type:'image/gif'});
@@ -1456,7 +1457,7 @@
 				else merged.push({idx:fidx[i],delay:exportFrames[i].delay});
 			}
 
-			const gd=[],wr=new window.GifWriter(gd,gw,gh,{palette,loop:0});
+			const gd=[],wr=new GifWriter(gd,gw,gh,{palette,loop:0});
 			wr.addFrame(0,0,gw,gh,merged[0].idx,{delay:Math.max(1,Math.round(merged[0].delay/10)),disposal:1});
 			for(let i=1;i<merged.length;i++){
 				const curr=merged[i].idx,prev=merged[i-1].idx;
