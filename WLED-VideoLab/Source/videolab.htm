@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
 <meta name="author" content="@dedehai">
 <meta name="license" content="EUPL v. 1.2 or later">
-<link rel="shortcut icon" href="favicon.ico">
+<script src="omggif.js"></script>
 <title>WLED VideoLab</title>
 <style>
 body {
@@ -544,7 +544,7 @@ const lRegn = getId('lregn');
 const lSt = getId('lstart');
 const lEd = getId('lend');
 let mDrag = null;
-let is8266 = false, canStream = false; // variables for compatibility check
+let is8266 = false, canStream = false; gifSupport = true;// variables for compatibility check
 
 // load external resources in sequence to avoid 503 errors if heap is low, repeats indefinitely until loaded
 (function loadFiles() {
@@ -552,22 +552,19 @@ let is8266 = false, canStream = false; // variables for compatibility check
 	s.src = 'common.js';
 	s.onerror = () => setTimeout(loadFiles, 100);
 	s.onload = async () => {
-		try {
-			getLoc(); // set up loc/locip for getURL() before any fetch (file mode / reverse proxy)
-			await loadSize(); // loads info.json and sets parameters indluding is8266
-		} catch(e){}
-		const resources = ['style.css'];
-		if (!is8266) resources.push('omggif.js'); // omggif is not available on ESP8266
-		loadResources(resources, init);
+		loadResources(['style.css'], init);
 	};
 	doc.head.appendChild(s);
 })();
 
 async function init() {
-    ws = connectWs(()=>console.log('WS connected'));
-    loadGamma();
-    buildLUT();
-    loadPresets();
+	getLoc(); // set up loc/locip for getURL() before any fetch (file mode / reverse proxy)
+	await loadSize(); // loads info.json and sets parameters indluding is8266
+	ws = connectWs(()=>console.log('WS connected'));
+	loadGamma();
+	buildLUT();
+	loadPresets();
+	if (typeof GifReader === 'undefined') gifSupport = false; // failed to load omggif
 }
 // --- UI message + overlay helpers ---
 function msg(txt, typ){
@@ -738,7 +735,7 @@ function startCap(isUrl){
 
 	getId('vctrl').style.display = 'flex';
 	getId('saveP').style.display = isUrl ? 'inline-block' : 'none';
-	if (!is8266) getId('expGif').style.display = 'inline-block'; // gif not supported on ESP8266
+	if (gifSupport) getId('expGif').style.display = 'inline-block'; // gif not supported on ESP8266
 
 	if(vid.duration && !isNaN(vid.duration)){
 		lEnd = vid.duration;

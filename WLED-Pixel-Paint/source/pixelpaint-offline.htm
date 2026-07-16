@@ -5,6 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
 	<meta name="author" content="@dedehai">
 	<meta name="license" content="EUPL v. 1.2 or later">
+	<script src="omggif.js"></script>
 	<title>WLED Pixel Paint</title>
 	<style>
 		@font-face {
@@ -328,7 +329,7 @@
 		let animFrames = [], animMode = 'rec', isRecording = false, recIntervalId = null, playAsRec = false;
 		let animPrvTimer = null, onionEnabled = false, lastAnimBlob = null, pingPong = false;
 		let selFrameIdx = -1;
-		let is8266 = false;
+		let is8266 = false, gifSupport = true;
 
 		const c2h = (r,g,b)=>((r<<16)|(g<<8)|b).toString(16).padStart(6,'0').toUpperCase();
 
@@ -338,22 +339,21 @@
 			s.src = 'common.js';
 			s.onerror = () => setTimeout(loadFiles, 100);
 			s.onload = async () => {
-				try {
-					getLoc(); // set up loc/locip for getURL() before any fetch (file mode / reverse proxy)
-					const r = await fetch(getURL('/json/info'));
-					const inf = await r.json();
-					is8266 = inf.arch === 'esp8266';
-				} catch(e){}
-				const resources = ['iro.js'];
-				if (!is8266) resources.push('omggif.js'); // omggif is not available on ESP8266
-				loadResources(resources, init);
+				loadResources(['iro.js'], init);
 			};
 			document.head.appendChild(s);
 		})();
 
 		// init function, reads current segments and puts them in the select list
 		async function init() {
-			if (is8266) gId("animSect").style.display = 'none'; // hide whole animation section on ESP8266
+			try {
+				getLoc(); // set up loc/locip for getURL() before any fetch (file mode / reverse proxy)
+				const r = await fetch(getURL('/json/info'));
+				const inf = await r.json();
+				is8266 = inf.arch === 'esp8266';
+			} catch(e){}
+			if (typeof GifReader === 'undefined') gifSupport = false; // failed to load omggif
+			if (!gifSupport) gId("animSect").style.display = 'none'; // hide whole animation section on ESP8266
 			maxColInd = is8266 ? 35 : 85; // maxColInd is the maximum individual color commands that fit in WS buffer (~12 bytes per color, conservative estimate)
 			canv = gId("canv"); ctx = canv.getContext("2d");
 			canvPrev1D = gId("canvPrev1D"); ctxPrev1D = canvPrev1D.getContext("2d");
@@ -954,9 +954,9 @@
 				reader.onload=ev=>{
 					const buf=new Uint8Array(ev.target.result);
 					// Check if it's a animated GIF if omggif is available
-					if(typeof window.GifReader !== 'undefined' && buf.length>6&&buf[0]===0x47&&buf[1]===0x49&&buf[2]===0x46){
+					if(gifSupport && buf.length>6&&buf[0]===0x47&&buf[1]===0x49&&buf[2]===0x46){
 						try{
-							const gif=new window.GifReader(buf);
+							const gif=new GifReader(buf);
 							const nf=gif.numFrames();
 							if(nf>1){
 								// Animated GIF: load all frames with proper disposal handling
@@ -1190,7 +1190,7 @@
 				// WLED /upload expects field name "data", not "file" (matches common.js uploadFile)
 				fd.append('data', new File([blob], fn, {type: 'image/gif'}), fn);
 				const r=await fetch(getURL('/upload'),{method:'POST',body:fd});
-				if(r.ok)toast(`${esc(fn)} saved`);
+				if(r.ok)toast(`${esc(fn)} uploaded`);
 				else toast('Upload failed',true);
 			}catch(e){toast(`Error: ${e.message}`,true);}
 		}
@@ -1389,7 +1389,7 @@
 			gId('savePreset').style.display = isAnimation ? 'none' : ''; // can not save an animation as a preset
 			gId('animClrArea').style.display = isAnimation ? '' : 'none';
 			gId('applyAllBtn').disabled = !isAnimation;
-			gId('saveGIF').style.display   =  is8266 ? 'none' : ''; // hide gif button on ESP8266
+			gId('saveGIF').style.display = gifSupport ? '' : 'none'; // hide gif button if omggif.js loading failed
 		}
 
 		// builds the animated gif using the same bounding-box differential encoding as saveGIF's palette logic (median-cut genPal),
