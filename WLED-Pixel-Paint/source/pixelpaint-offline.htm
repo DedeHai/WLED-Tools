@@ -287,8 +287,8 @@
 			<div id="animClrArea" style="display:none;text-align:center;margin-top:8px;">
 			    <button class="btn" onclick="clearAnim()">Clear frames</button>
 		    </div>
-			<button class="btn" onclick="downloadAnimGif()">Download GIF</button>
-			<button class="btn" onclick="uploadAnimGif()">Upload to WLED</button>
+			<button class="btn" id="dlGifBtn" onclick="downloadAnimGif()">Download GIF</button>
+			<button class="btn" id="upGifBtn" onclick="uploadAnimGif()">Upload to WLED</button>
 		</div>
 
 	</div>
@@ -324,8 +324,13 @@
 			const s = document.createElement('script');
 			s.src = 'common.js';
 			s.onerror = () => setTimeout(loadFiles, 100);
-			s.onload = () => {
-				loadResources(['omggif.js', 'iro.js'], init);
+			s.onload = async () => {
+				fetch(getURL('/json/info')).then(r=>r.json()).then(inf=>{
+					is8266=inf.arch==='esp8266';
+				}).catch(()=>{});
+				const resources = ['iro.js'];
+				if (!is8266) resources.push('omggif.js'); // omggif is not available on ESP8266
+				loadResources(resources, init);
 			};
 			document.head.appendChild(s);
 		})();
@@ -349,7 +354,7 @@
 		// init function, reads current segments and puts them in the select list
 		async function init() {
 			getLoc();
-
+			maxColInd = is8266 ? 35 : 85; // maxColInd is the maximum individual color commands that fit in WS buffer (~12 bytes per color, conservative estimate)
 			canv = gId("canv"); ctx = canv.getContext("2d");
 			canvPrev1D = gId("canvPrev1D"); ctxPrev1D = canvPrev1D.getContext("2d");
 			mW = gId("matrixW"); mH = gId("matrixH");
@@ -461,6 +466,7 @@
 			} catch(e) { console.error(e); }
 			updateMatrix();
 			togglePreview();
+			updateUploadVisibility();
 		}
 
 		function updateMatrix() {
@@ -864,9 +870,6 @@
 
 		function initWS(){
 			ws=connectWs();
-			fetch(getURL('/json/info')).then(r=>r.json()).then(inf=>{
-				maxColInd=inf.arch==='esp8266'?35:85; // maxColInd is the maximum individual color commands that fit in WS buffer (~12 bytes per color, conservative estimate)
-			}).catch(()=>{});
 			if(!ws)maxColInd=256;
 		}
 
@@ -1355,15 +1358,21 @@
 			animFrames=[];lastAnimBlob=null;selFrameIdx=-1;stopAnimPreview();
 			gId('animPrvArea').style.display='none';
 			gId('animClrArea').style.display='none';
-			updateSMFrameList();drawAll();updateUploadVisibility();
+			updateSMFrameList();
+			drawAll();
+			updateUploadVisibility();
 		}
 
 		function updateUploadVisibility(){
-			const has = animFrames.length > 0;
-			gId('savePreset').style.display = has ? 'none' : '';
-			gId('saveGIF').style.display   = has ? 'none' : '';
-			gId('animClrArea').style.display = has ? '' : 'none';
-			gId('applyAllBtn').disabled = !has;
+			const isAnimation = animFrames.length > 0; // multiple frames
+			// without gif support (esp8266, or omggif failed to load on esp32) only the preset option makes sense
+			gId('savePreset').style.display = (isAnimation && !is8266) ? 'none' : ''; // always show preset saving on 8266, it should not have any animation frames
+			gId('animClrArea').style.display = isAnimation ? '' : 'none';
+			gId('applyAllBtn').disabled = !isAnimation;
+			// hide gif related buttons on ESP8266
+			gId('saveGIF').style.display   = (isAnimation || is8266) ? 'none' : '';
+			gId('dlGifBtn').style.display  = is8266 ? '' : 'none';
+			gId('upGifBtn').style.display  = is8266 ? '' : 'none';
 		}
 
 		// builds the animated gif using the same bounding-box differential encoding as saveGIF's palette logic (median-cut genPal),
