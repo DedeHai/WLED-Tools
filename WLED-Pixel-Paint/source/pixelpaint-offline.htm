@@ -353,7 +353,7 @@
 
 		// init function, reads current segments and puts them in the select list
 		async function init() {
-			getLoc();
+			if (is8266) gId("animSect").style.display = 'none'; // hide whole animation section on ESP8266
 			maxColInd = is8266 ? 35 : 85; // maxColInd is the maximum individual color commands that fit in WS buffer (~12 bytes per color, conservative estimate)
 			canv = gId("canv"); ctx = canv.getContext("2d");
 			canvPrev1D = gId("canvPrev1D"); ctxPrev1D = canvPrev1D.getContext("2d");

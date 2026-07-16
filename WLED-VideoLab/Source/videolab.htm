@@ -507,12 +507,14 @@ input[type="color"] {
 
 <script>
 // DOM helpers
-const cvs = gId('canvas'), ctx = cvs.getContext('2d', {willReadFrequently:true});
-const pv = gId('pv'), pvx = pv.getContext('2d', {willReadFrequently:true});
-const vid = gId('video');
-const capCvs = document.createElement('canvas'); // offscreen capture canvas at target resolution
+var doc=document;
+function getId(c) { return doc.getElementById(c); } // needed before common.js is loaded so we define our own with different name to avoid conflicts
+const cvs = getId('canvas'), ctx = cvs.getContext('2d', {willReadFrequently:true});
+const pv = getId('pv'), pvx = pv.getContext('2d', {willReadFrequently:true});
+const vid = getId('video');
+const capCvs = doc.createElement('canvas'); // offscreen capture canvas at target resolution
 const capCtx  = capCvs.getContext('2d', {willReadFrequently:true});
-const dsCvs = document.createElement('canvas'); // offscreen downscale canvas for preview (much faster)
+const dsCvs = doc.createElement('canvas'); // offscreen downscale canvas for preview (much faster)
 const dsCtx = dsCvs.getContext('2d', {willReadFrequently:true});
 let rgbBuf = null, lut = new Uint8ClampedArray(256), thr = 0, bgc = [0,0,0], bri = 1; // buffers/variables for faster color processing
 
@@ -526,27 +528,27 @@ let keepSend = true;
 let lStart = 0;	// seconds - loop region start
 let lEnd = null;	// seconds - loop region end (null means full video)
 
-const playBtn = gId('play');
-const muteBtn = gId('mute');
-const prog = gId('prog');
-const tDisp = gId('tdisp');
-const spdSl = gId('speed');
+const playBtn = getId('play');
+const muteBtn = getId('mute');
+const prog = getId('prog');
+const tDisp = getId('tdisp');
+const spdSl = getId('speed');
 
 let sendBusy = false;
 let lastSend = 0;
 const CAP_INT = 33; // ~30 FPS capture used in live sending
 const QUEUE_MAX = 65536; // max number of bytes allowed in WS queue before skipping frames
 
-const pWrap = gId('pwrap');
-const lRegn = gId('lregn');
-const lSt = gId('lstart');
-const lEd = gId('lend');
+const pWrap = getId('pwrap');
+const lRegn = getId('lregn');
+const lSt = getId('lstart');
+const lEd = getId('lend');
 let mDrag = null;
 let is8266 = false, canStream = false; // variables for compatibility check
 
 // load external resources in sequence to avoid 503 errors if heap is low, repeats indefinitely until loaded
 (function loadFiles() {
-	const s = document.createElement('script');
+	const s = doc.createElement('script');
 	s.src = 'common.js';
 	s.onerror = () => setTimeout(loadFiles, 100);
 	s.onload = async () => {
@@ -558,7 +560,7 @@ let is8266 = false, canStream = false; // variables for compatibility check
 		if (!is8266) resources.push('omggif.js'); // omggif is not available on ESP8266
 		loadResources(resources, init);
 	};
-	document.head.appendChild(s);
+	doc.head.appendChild(s);
 })();
 
 async function init() {
@@ -569,22 +571,22 @@ async function init() {
 }
 // --- UI message + overlay helpers ---
 function msg(txt, typ){
-	const el = document.createElement('div');
+	const el = doc.createElement('div');
 	el.className='toast';
 	el.textContent=txt;
 	if(typ==='error') el.style.background='#d32f2f';
-	document.body.appendChild(el);
+	doc.body.appendChild(el);
 	setTimeout(()=>el.remove(), 3000);
 }
 
 function ovShow(){
-	const ov = gId('ovlay');
+	const ov = getId('ovlay');
 	if(!ov) return;
 	ov.style.display = 'block';
 	ov.classList.add('loading');
 }
 function ovHide(){
-	const ov = gId('ovlay');
+	const ov = getId('ovlay');
 	if(!ov) return;
 	ov.classList.remove('loading');
 	ov.style.display = 'none';
@@ -592,7 +594,7 @@ function ovHide(){
 
 // --- Load Matrix Dimensions, Segments are not supported in DDP streaming ---
 async function loadSize(){
-	const matrixsize = gId('mt'); // matrix size
+	const matrixsize = getId('mt'); // matrix size
 	try{
 		const r = await fetch(getURL('/json/info')), j = await r.json();
 		is8266 = j.arch === 'esp8266';
@@ -613,10 +615,10 @@ async function loadSize(){
 // --- processing canvas and LUT for gamma ---
 function initCapBuffers(){ capCvs.width = mw; capCvs.height = mh; rgbBuf = new Uint8Array(mw*mh*3); }
 function buildLUT(){
-	bri = +gId('br').value / 255;
-	thr = +gId('bt').value;
-	bgc = gId('bg').value.match(/\w\w/g).map(x=>parseInt(x,16));
-	const gam = +gId('gm').value;
+	bri = +getId('br').value / 255;
+	thr = +getId('bt').value;
+	bgc = getId('bg').value.match(/\w\w/g).map(x=>parseInt(x,16));
+	const gam = +getId('gm').value;
 	for(let i=0;i<256;i++){
 		lut[i] = Math.min(255, Math.round(Math.pow((i * bri) / 255, gam) * 255));
 	}
@@ -626,13 +628,13 @@ function buildLUT(){
 function loadGamma(newgamma){
 	if(newgamma){
 		localStorage.setItem('gamma', newgamma);
-		gId('gmVal').textContent = newgamma;
+		getId('gmVal').textContent = newgamma;
 		buildLUT();
 		return;
 	}
 	const g = localStorage.getItem('gamma') || 2.2;
-	gId('gm').value = g;
-	gId('gmVal').textContent = g;
+	getId('gm').value = g;
+	getId('gmVal').textContent = g;
 }
 
 // --- keep capturing and sending data when video paused ---
@@ -640,22 +642,22 @@ setInterval(() => {
   if (vid.paused && vInp && !capBusy) capFrame();
 }, 50);
 
-gId('gm').oninput = e => loadGamma(e.target.value);
-gId('cdepth').oninput = e => gId('colLbl').textContent = 1 << e.target.value;
+getId('gm').oninput = e => loadGamma(e.target.value);
+getId('cdepth').oninput = e => getId('colLbl').textContent = 1 << e.target.value;
 
 // --- File and URL loading ---
-gId('dropz').onclick = ()=>{ gId('file').value=''; gId('file').click(); };
-gId('dropz').ondragover = e=>{ e.preventDefault(); gId('dropz').classList.add('active'); };
-gId('dropz').ondragleave = ()=>gId('dropz').classList.remove('active');
-gId('dropz').ondrop = e=>{
-	e.preventDefault(); gId('dropz').classList.remove('active');
-	gId('file').files = e.dataTransfer.files;
+getId('dropz').onclick = ()=>{ getId('file').value=''; getId('file').click(); };
+getId('dropz').ondragover = e=>{ e.preventDefault(); getId('dropz').classList.add('active'); };
+getId('dropz').ondragleave = ()=>getId('dropz').classList.remove('active');
+getId('dropz').ondrop = e=>{
+	e.preventDefault(); getId('dropz').classList.remove('active');
+	getId('file').files = e.dataTransfer.files;
 	handleFile();
 };
-gId('file').onchange = handleFile;
+getId('file').onchange = handleFile;
 
 function handleFile(){
-	const f = gId('file').files[0];
+	const f = getId('file').files[0];
 	if(!f) return;
 	if(!f.type.startsWith('video/')){ msg('Only video files supported','error'); return; }
 	stopVid();
@@ -668,8 +670,8 @@ function handleFile(){
 	});
 }
 
-gId('loadU').onclick = ()=>{
-	const url = gId('url').value.trim();
+getId('loadU').onclick = ()=>{
+	const url = getId('url').value.trim();
 	if(!url){ msg('Enter a URL','error'); return; }
 	loadUrl(url).catch(e=>msg('Failed to load: '+e.message,'error'));
 };
@@ -697,20 +699,20 @@ function stopVid(){
   if (vfcHandle){ try { vid.cancelVideoFrameCallback(vfcHandle); } catch(e){} vfcHandle = null; }
   if (loopInt){ clearInterval(loopInt); loopInt = null; }
   keepSend = false;
-	capBusy = false; 
+	capBusy = false;
 
   if (vid.src){
     const old = vid.src;
     vid.pause(); vid.src = ''; vid.load();
     if (old.startsWith('blob:')) URL.revokeObjectURL(old);
   }
-  gId('saveP').style.display = 'none';
-  gId('expGif').style.display = 'none';
-  gId('editor').classList.remove('active');
+  getId('saveP').style.display = 'none';
+  getId('expGif').style.display = 'none';
+  getId('editor').classList.remove('active');
 }
 // --- Start capture ---
 function startCap(isUrl){
-	gId('editor').classList.add('active');
+	getId('editor').classList.add('active');
 	isUrlSrc = !!isUrl;
 
 	const asp = vid.videoHeight / vid.videoWidth;
@@ -734,9 +736,9 @@ function startCap(isUrl){
 	if (!vfcHandle) vfcHandle = vid.requestVideoFrameCallback(onVFrame);
 	capFrame();
 
-	gId('vctrl').style.display = 'flex';
-	gId('saveP').style.display = isUrl ? 'inline-block' : 'none';
-	if (!is8266) gId('expGif').style.display = 'inline-block'; // gif not supported on ESP8266
+	getId('vctrl').style.display = 'flex';
+	getId('saveP').style.display = isUrl ? 'inline-block' : 'none';
+	if (!is8266) getId('expGif').style.display = 'inline-block'; // gif not supported on ESP8266
 
 	if(vid.duration && !isNaN(vid.duration)){
 		lEnd = vid.duration;
@@ -794,12 +796,12 @@ function updTime(){
 if (spdSl) spdSl.oninput = e => {
 	const v = parseFloat(e.target.value);
 	vid.playbackRate = v;
-	gId('spLbl').textContent = v.toFixed(1) + 'x';
+	getId('spLbl').textContent = v.toFixed(1) + 'x';
 };
 
-gId('stop').onclick = ()=>{
+getId('stop').onclick = ()=>{
 	stopVid(); vInp = null;
-	gId('editor').classList.remove('active');
+	getId('editor').classList.remove('active');
 	msg('Stopped');
 };
 
@@ -823,7 +825,7 @@ async function capFrame(){
     const ch = crop.h / vRect.h * dsCvs.height;
 
     capCtx.imageSmoothingEnabled = false;
-    capCtx.fillStyle = gId('bg').value;
+    capCtx.fillStyle = getId('bg').value;
     capCtx.fillRect(0,0,mw,mh);
     capCtx.drawImage(dsCvs, cx, cy, cw, ch, 0, 0, mw, mh);
 
@@ -924,16 +926,16 @@ function clampCrop(){
 }
 
 // controls
-gId('bg').oninput = ()=>{ buildLUT(); };
-gId('bt').oninput = ()=>{ gId('btVal').textContent = gId('bt').value; buildLUT(); };
-gId('br').oninput = ()=>{ gId('brVal').textContent = gId('br').value; buildLUT(); };
+getId('bg').oninput = ()=>{ buildLUT(); };
+getId('bt').oninput = ()=>{ getId('btVal').textContent = getId('bt').value; buildLUT(); };
+getId('br').oninput = ()=>{ getId('brVal').textContent = getId('br').value; buildLUT(); };
 
-gId('mAsp').onclick = e=>{
+getId('mAsp').onclick = e=>{
 	e.preventDefault();
 	const r = mw / mh; crop.h = crop.w / r; clampCrop();
 };
 
-gId('mSize').onclick = e=>{
+getId('mSize').onclick = e=>{
 	e.preventDefault(); if(!vInp) return;
 	//const sc = vRect.w / vid.videoWidth;
 	//crop.w = mw * sc; crop.h = mh * sc; clampCrop(); updPrev();
@@ -941,12 +943,12 @@ gId('mSize').onclick = e=>{
 	crop.w = mw * sc; crop.h = mh * sc;
 };
 
-gId('fSize').onclick = e=>{
+getId('fSize').onclick = e=>{
 	e.preventDefault(); if(!vInp) return;
 	crop.x = vRect.x; crop.y = vRect.y; crop.w = vRect.w; crop.h = vRect.h; clampCrop();
 };
 
-gId('rCrop').onclick = e=>{ e.preventDefault(); if(!vInp) return; initCrop(); };
+getId('rCrop').onclick = e=>{ e.preventDefault(); if(!vInp) return; initCrop(); };
 
 function getHandles(r){
 	const sz = 40, of = sz / 2;
@@ -1022,21 +1024,21 @@ function savePresets(lst){ localStorage.setItem('wled_video_presets', JSON.strin
 
 function loadPresets(){
 	const ps = getPresets();
-	const lst = gId('plist'), cont = gId('prests');
+	const lst = getId('plist'), cont = getId('prests');
 	if(!ps.length){ cont.style.display = 'none'; return; }
 	cont.style.display = 'block'; lst.innerHTML = '';
 
 	ps.forEach((p, i)=>{
-		const div = document.createElement('div'); div.className = 'prow';
-		const btn = document.createElement('button'); btn.className = 'sml'; btn.style.flex='1';
+		const div = doc.createElement('div'); div.className = 'prow';
+		const btn = doc.createElement('button'); btn.className = 'sml'; btn.style.flex='1';
 		btn.textContent = p.name; btn.title = p.url || '(local preset)';
 		btn.onclick = async()=>{
 			try{
-				if (p.url) { gId('url').value = p.url; await loadUrl(p.url); applyPreset(p); }
+				if (p.url) { getId('url').value = p.url; await loadUrl(p.url); applyPreset(p); }
 				else { applyPreset(); }
 			}catch(e){ msg('Preset error', 'error'); }
 		};
-		const upd = document.createElement('button'); upd.className = 'sml'; upd.textContent = '⟳';
+		const upd = doc.createElement('button'); upd.className = 'sml'; upd.textContent = '⟳';
 		upd.onclick = ()=>{
 			if(confirm(`Update "${p.name}"?`)){
 				const a = getPresets();
@@ -1049,7 +1051,7 @@ function loadPresets(){
 				msg('Preset updated');
 			}
 		};
-		const del = document.createElement('button'); del.className = 'sml'; del.textContent = '✕';
+		const del = doc.createElement('button'); del.className = 'sml'; del.textContent = '✕';
 		del.onclick = ()=>{
 			if(confirm(`Delete "${p.name}"?`)){
 				const a = getPresets(); a.splice(i, 1); savePresets(a); loadPresets(); msg('Preset deleted');
@@ -1062,21 +1064,21 @@ function loadPresets(){
 
 function applyPreset(p){
 	if (p.url) {
-		gId('url').value = p.url;
+		getId('url').value = p.url;
 	}
 
 	if(p.crop) { crop = {...p.crop}; clampCrop(); }
 
-	gId('bt').value = p.bt ?? gId('bt').value; gId('btVal').textContent = gId('bt').value;
-	gId('br').value = p.br ?? gId('br').value; gId('brVal').textContent = gId('br').value;
-	gId('gm').value = p.gm ?? gId('gm').value; gId('gmVal').textContent = gId('gm').value;
-	gId('bg').value = p.bg ?? gId('bg').value;
+	getId('bt').value = p.bt ?? getId('bt').value; getId('btVal').textContent = getId('bt').value;
+	getId('br').value = p.br ?? getId('br').value; getId('brVal').textContent = getId('br').value;
+	getId('gm').value = p.gm ?? getId('gm').value; getId('gmVal').textContent = getId('gm').value;
+	getId('bg').value = p.bg ?? getId('bg').value;
 	buildLUT();
 
 	if (typeof p.mute !== 'undefined') vid.muted = !!p.mute;
 	if (typeof p.speed !== 'undefined') {
-		vid.playbackRate = p.speed; gId('speed').value = p.speed;
-		gId('spLbl').textContent = p.speed.toFixed(1) + 'x';
+		vid.playbackRate = p.speed; getId('speed').value = p.speed;
+		getId('spLbl').textContent = p.speed.toFixed(1) + 'x';
 	}
 
 	if (typeof p.lStart === 'number') lStart = Number(p.lStart);
@@ -1092,14 +1094,14 @@ function applyPreset(p){
 	if (p.paused) vid.pause(); else vid.play().catch(()=>{});
 
 	updPrev();
-	gId('saveP').style.display = 'inline-block';
-	if (!is8266) gId('expGif').style.display = 'inline-block'; // gif not supported on ESP8266
+	getId('saveP').style.display = 'inline-block';
+	if (!is8266) getId('expGif').style.display = 'inline-block'; // gif not supported on ESP8266
 }
 
 function addPreset(plist) {
-	const url = gId('url').value.trim();
+	const url = getId('url').value.trim();
 	const p = {
-		name: gId('pname').value || '',
+		name: getId('pname').value || '',
 		...(url && !url.startsWith('blob:') ? {url} : {}),
 		crop: {...crop},
 		mute: vid.muted,
@@ -1108,31 +1110,31 @@ function addPreset(plist) {
 		paused: vid.paused,
 		lStart,
 		lEnd,
-		bt: gId('bt').value,
-		br: gId('br').value,
-		gm: gId('gm').value,
-		bg: gId('bg').value
+		bt: getId('bt').value,
+		br: getId('br').value,
+		gm: getId('gm').value,
+		bg: getId('bg').value
 	};
 	plist.push(p);
 }
 
-gId('saveP').onclick = () => {
-	const url = gId('url').value.trim();
+getId('saveP').onclick = () => {
+	const url = getId('url').value.trim();
 	const base = url ? url.split('/').pop().split('?')[0].replace(/\.[^/.]+$/, '') : 'local-video';
 	const def = base.substring(0, 32) || 'video';
-	gId('pname').value = def;
-	gId('saveDlg').classList.add('active');
+	getId('pname').value = def;
+	getId('saveDlg').classList.add('active');
 };
 
-gId('saveOk').onclick = ()=>{
+getId('saveOk').onclick = ()=>{
 	const a = getPresets();
 	addPreset(a);
 	savePresets(a);
 	loadPresets();
-	msg('Preset saved'); gId('saveDlg').classList.remove('active');
+	msg('Preset saved'); getId('saveDlg').classList.remove('active');
 };
 
-gId('saveCn').onclick = ()=> gId('saveDlg').classList.remove('active');
+getId('saveCn').onclick = ()=> getId('saveDlg').classList.remove('active');
 
 // --- Loop marker / marker drag handling ---
 function clampLoop(){
@@ -1203,9 +1205,9 @@ function onDocUp(ev){
 
 lSt.addEventListener('pointerdown', e => onMarkDown(e, 'start'));
 lEd.addEventListener('pointerdown', e => onMarkDown(e, 'end'));
-document.addEventListener('pointermove', onDocMove, {passive:false});
-document.addEventListener('pointerup', onDocUp, {passive:false});
-document.addEventListener('pointercancel', onDocUp, {passive:false});
+doc.addEventListener('pointermove', onDocMove, {passive:false});
+doc.addEventListener('pointerup', onDocUp, {passive:false});
+doc.addEventListener('pointercancel', onDocUp, {passive:false});
 
 prog.addEventListener('pointerdown', (e) => {
 	if (mDrag || !vid.duration || isNaN(vid.duration)) return;
@@ -1302,7 +1304,7 @@ function grid(length) {
 // --- GIF export UI + logic ---
 let gifBlob, gifName;
 
-gId('expGif').onclick = () => {
+getId('expGif').onclick = () => {
 	if(!vInp){ msg('No video loaded', 'error'); return; }
 	if(isUrlSrc){ alert('Converting online sources directly can fail'); }
 	if(!vid.duration || isNaN(vid.duration)){ msg('Video metadata not ready', 'error'); return; }
@@ -1310,23 +1312,23 @@ gId('expGif').onclick = () => {
 	const wasPlay = !vid.paused;
 	if (wasPlay) vid.pause();
 
-	gId('gname').value = 'myvideo';
-	gId('gfps').value = 20;
-	gId('cdepth').value = 8; gId('colLbl').textContent = '256';
-	gId('ggamma').checked = true;
-	gId('expDlg').classList.add('active');
+	getId('gname').value = 'myvideo';
+	getId('gfps').value = 20;
+	getId('cdepth').value = 8; getId('colLbl').textContent = '256';
+	getId('ggamma').checked = true;
+	getId('expDlg').classList.add('active');
 
-	const expOk = gId('expOk'), expCn = gId('expCn');
+	const expOk = getId('expOk'), expCn = getId('expCn');
 
 	expOk.onclick = async () => {
-		gId('expDlg').classList.remove('active');
+		getId('expDlg').classList.remove('active');
 		ovShow();
 		try {
-			const r = await expGif(gId('gname').value.trim() || 'mygif', +gId('gfps').value, 1 << +gId('cdepth').value);
+			const r = await expGif(getId('gname').value.trim() || 'mygif', +getId('gfps').value, 1 << +getId('cdepth').value);
 			ovHide();
 			gifBlob = r.blob; gifName = r.name;
-			gId('gifInf').textContent = `${(r.blob.size/1024).toFixed(1)} KB | ${r.frames} frames | ${r.duration.toFixed(2)}s`;
-			const prvImg = gId('gifPrv');
+			getId('gifInf').textContent = `${(r.blob.size/1024).toFixed(1)} KB | ${r.frames} frames | ${r.duration.toFixed(2)}s`;
+			const prvImg = getId('gifPrv');
 			const url = URL.createObjectURL(gifBlob);
 			const tmp = new Image();
 			tmp.src = url;
@@ -1340,7 +1342,7 @@ gId('expGif').onclick = () => {
 				prvImg.style.display = "block";
 			};
 			prvImg.onload = () => URL.revokeObjectURL(prvImg.src);
-			gId('resDlg').classList.add('active');
+			getId('resDlg').classList.add('active');
 		} catch(e) {
 			ovHide(); msg('Export failed: ' + e.message, 'error');
 			if (wasPlay) vid.play().catch(()=>{});
@@ -1348,36 +1350,36 @@ gId('expGif').onclick = () => {
 	};
 
 	expCn.onclick = () => {
-		gId('expDlg').classList.remove('active');
+		getId('expDlg').classList.remove('active');
 		if (wasPlay) vid.play().catch(()=>{});
 	};
 };
 
-gId('gifDl').onclick = () => {
+getId('gifDl').onclick = () => {
 	const url = URL.createObjectURL(gifBlob);
-	const a = document.createElement('a');
+	const a = doc.createElement('a');
 	a.href = url; a.download = gifName + '.gif'; a.click();
 	URL.revokeObjectURL(url);
-	gId('gifPrv').style.display = 'none';
-	gId('resDlg').classList.remove('active');
+	getId('gifPrv').style.display = 'none';
+	getId('resDlg').classList.remove('active');
 };
 
-gId('gifUp').onclick = async () => {
+getId('gifUp').onclick = async () => {
 	try {
 		const fd = new FormData();
 		fd.append('file', gifBlob, gifName + '.gif');
 		const r = await fetch(getURL('/upload'), { method: 'POST', body: fd });
 		if (r.ok) {
-			gId('gifPrv').style.display = 'none';
+			getId('gifPrv').style.display = 'none';
 			msg('Uploaded');
-			gId('resDlg').classList.remove('active');
+			getId('resDlg').classList.remove('active');
 		} else msg('Upload failed', 'error');
 	} catch(e) { msg('Upload failed', 'error'); }
 };
 
-gId('gifCn').onclick = () => {
-	gId('gifPrv').style.display = 'none';
-	gId('resDlg').classList.remove('active');
+getId('gifCn').onclick = () => {
+	getId('gifPrv').style.display = 'none';
+	getId('resDlg').classList.remove('active');
 };
 
 // GIF export helpers
@@ -1395,11 +1397,11 @@ async function capGifFrame(tctx, mw, mh) {
     const cy = (crop.y - vRect.y) / vRect.h * vid.videoHeight;
     const cw = crop.w / vRect.w * vid.videoWidth;
     const ch = crop.h / vRect.h * vid.videoHeight;
-    tctx.fillStyle = gId('bg').value;
+    tctx.fillStyle = getId('bg').value;
     tctx.fillRect(0, 0, mw, mh);
     tctx.drawImage(vid, cx, cy, cw, ch, 0, 0, mw, mh);
     const fd = tctx.getImageData(0, 0, mw, mh);
-    applyFilt(fd, gId('ggamma').checked);
+    applyFilt(fd, getId('ggamma').checked);
     return new Uint8ClampedArray(fd.data);
 }
 
@@ -1409,7 +1411,7 @@ async function expGif(nm, fps, maxCols) {
 	const tStart = useLoop ? lStart : 0;
 	const tEnd = useLoop ? lEnd : vid.duration;
 	const tStep = spd / fps;
-	const tc = document.createElement('canvas');
+	const tc = doc.createElement('canvas');
 	tc.width = mw; tc.height = mh;
 	const tctx = tc.getContext('2d', { willReadFrequently: true });
 	tctx.imageSmoothingEnabled = false;
