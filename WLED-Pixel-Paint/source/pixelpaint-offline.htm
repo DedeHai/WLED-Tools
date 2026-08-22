@@ -152,6 +152,8 @@
 			touch-action: none;
 		}
 		#canv.hidden { display: none; }
+		
+		.frame-item canvas{width:32px;height:32px;image-rendering:pixelated;border-radius:4px;background:#111}
 
 		.tools-wrapper { display: flex; flex-direction: column; gap: 16px; }
 		#status { padding: 6px 16px; border-radius: 20px; background: #a00; font-size: 14px; }
@@ -268,7 +270,7 @@
 			<button class="anim-tab" id="recBtn" onclick="toggleRecord()">&#9679; Record</button>
 		</div>
 		<div class="anim-row dim" style="margin-bottom:8px">
-			<span id="recWrap"><label>Record FPS: <input type="number" id="recFps" value="10" min="0.1" max="30"> </label>
+			<span id="recWrap"><label>Record FPS: <input type="number" id="recFps" value="10" min="1" max="30"> </label>
 			<label><input type="checkbox" id="fixDurCheck" onchange="setPlayAsRec(this.checked)"> Auto Pause</label></span>
 		</div>
 		<div class="sm-panel" id="smPanel">
@@ -327,7 +329,7 @@
 		let offCanv, offCtx;
 		let globalBri = null;
 		let animFrames = [], animMode = 'rec', isRecording = false, recIntervalId = null, playAsRec = false;
-		let animPrvTimer = null, onionEnabled = false, lastAnimBlob = null, pingPong = false;
+		let animPrvTimer = null, onionEnabled = false, pingPong = false;
 		let selFrameIdx = -1;
 		let is8266 = false, gifSupport = true;
 
@@ -470,6 +472,7 @@
 		}
 
 		function updateMatrix() {
+			// note: if segment dimensions are changed while frames were recorded, it corrupts the frames. Segment is not locked intentionally.
 			is1D = +mH.value <= 1;
 
 			if (is1D) {
@@ -870,7 +873,7 @@
 
 		function initWS(){
 			ws=connectWs();
-			if(!ws)maxColInd=256;
+			if(!ws&&!is8266)maxColInd=256;
 		}
 
 		// send json request over WS or HTTP
@@ -962,8 +965,9 @@
 								// Animated GIF: load all frames with proper disposal handling
 								animFrames=[];
 								const gw=gif.width,gh=gif.height;
+								const unwrap = is1D && gh>1 && gw*gh>=w && gw*gh<=w+1; // grid-packed 1D-strip
 								// Resample GIF frames to current matrix dimensions if needed
-								const needsResize = (gw !== w || gh !== h);
+								const needsResize = !unwrap && (gw !== w || gh !== h);
 								const tmpCanvas = needsResize ? document.createElement('canvas') : null;
 								const tmpCtx = needsResize ? tmpCanvas.getContext('2d') : null;
 								if (needsResize) {
@@ -997,15 +1001,18 @@
 									c.drawImage(tmp,info.x,info.y,info.width,info.height,info.x,info.y,info.width,info.height);
 									// Capture full canvas as frame
 									let framePx;
-									if (needsResize) {
-											// Resample to current w/h using drawImage scaling
-											tmpCtx.clearRect(0, 0, w, h);
-											tmpCtx.drawImage(cvs, 0, 0, gw, gh, 0, 0, w, h);
-											framePx = tmpCtx.getImageData(0, 0, w, h).data;
+									if (unwrap) {
+										// grid rows are already in strip order, just drop the padding pixel if present
+										framePx = c.getImageData(0,0,gw,gh).data.slice(0,w*4);
+									} else if (needsResize) {
+										// Resample to current w/h using drawImage scaling
+										tmpCtx.clearRect(0, 0, w, h);
+										tmpCtx.drawImage(cvs, 0, 0, gw, gh, 0, 0, w, h);
+										framePx = tmpCtx.getImageData(0, 0, w, h).data;
 									} else {
-											framePx = c.getImageData(0, 0, gw, gh).data;
+										framePx = c.getImageData(0, 0, gw, gh).data;
 									}
-									const delay = Math.max(10, info.delay * 10) || 200;
+									const delay = info.delay<2 ? 100 : info.delay*10;
 									animFrames.push({pixels: new Uint8ClampedArray(framePx), delay: delay});
 									// Apply disposal method for NEXT frame
 									// 0=unspecified, 1=do not dispose, 2=restore to background, 3=restore to previous
@@ -1201,7 +1208,7 @@
 				// WLED /upload expects field name "data", not "file" (matches common.js uploadFile)
 				fd.append('data', new File([blob], fn, {type: 'image/gif'}), fn);
 				const r=await fetch(getURL('/upload'),{method:'POST',body:fd});
-				if(r.ok)toast(`${esc(fn)} uploaded`);
+				if(r.ok)toast(fn+' uploaded');
 				else toast('Upload failed',true);
 			}catch(e){toast(`Error: ${e.message}`,true);}
 		}
@@ -1214,8 +1221,7 @@
 				let blob;
 				if (animFrames.length > 0) {
 					// Animated GIF: use existing build logic
-					lastAnimBlob = null; // force rebuild
-					blob = getAnimBlob();
+					blob = buildAnimGif();
 					if (!blob) return; // getAnimBlob already toasts error
 				} else {
 					// Static GIF
@@ -1268,7 +1274,7 @@
 			isRecording?pauseRecord():resumeRecord();
 		}
 
-		// records at a fixed 20fps; identical consecutive frames are merged (delay accumulated) instead of stored, keeping file size down
+		// records at the configured FPS, identical consecutive frames are merged (delay accumulated) instead of stored, reducing file size
 		function resumeRecord(){
 			isRecording=true;
 			gId('recBtn').textContent='⏹ Stop';
@@ -1277,7 +1283,7 @@
 			stopAnimPreview();
 			updButtons();
 			let lastPix=animFrames.length?new Uint8ClampedArray(animFrames[animFrames.length-1].pixels):null;
-			const iv=Math.round(1000/(gId('recFps').value)||25);
+			iv=Math.round(1000/Math.min(30,Math.max(1,parseFloat(gId('recFps').value)||10))); // make sure record interval is limited to 1 - 30FPS
 			recIntervalId=setInterval(()=>{
 				const pix=captureMatrix();
 				if(lastPix&&pix.every((v,i)=>v===lastPix[i])){
@@ -1302,13 +1308,13 @@
 		function addSMFrame(){
 			const dur=Math.max(10,parseInt(gId('smDur').value)||200);
 			animFrames.push({pixels:captureMatrix(),delay:dur});
-			lastAnimBlob=null;selFrameIdx=-1;updateSMFrameList();showAnimPreview();
+			selFrameIdx=-1;updateSMFrameList();showAnimPreview();
 			gId('updBtn').disabled=true;gId('insBtn').disabled=true;
 			updButtons();
 		}
 
 		function deleteSMFrame(i){
-			animFrames.splice(i,1);lastAnimBlob=null;
+			animFrames.splice(i,1);
 			if(selFrameIdx===i){selFrameIdx=-1;gId('updBtn').disabled=true;gId('insBtn').disabled=true;}
 			else if(selFrameIdx>i)selFrameIdx--;
 			updateSMFrameList();
@@ -1319,9 +1325,12 @@
 		}
 
 		function updateSMFrameList(){
-			gId('smFrameList').innerHTML=animFrames.map((f,i)=>
-				`<div class="frame-item${i===selFrameIdx?' selected':''}" onclick="loadSMFrame(${i})">F${i+1} <span style="color:#08d">${f.delay}ms</span><button class="btn del-f" onclick="event.stopPropagation();deleteSMFrame(${i})">\u2715</button></div>`
+			const el=gId('smFrameList');
+			el.innerHTML=animFrames.map((f,i)=>
+				`<div class="frame-item${i===selFrameIdx?' selected':''}" onclick="loadSMFrame(${i})"><canvas width="${w}" height="${h}"></canvas>F${i+1} <span style="color:#08d">${f.delay}ms</span><button class="btn del-f" onclick="event.stopPropagation();deleteSMFrame(${i})">✕</button></div>`
 			).join('');
+			el.querySelectorAll('canvas').forEach((cv,i)=>
+				cv.getContext('2d').putImageData(new ImageData(animFrames[i].pixels,w,h),0,0));
 		}
 
 		function setOnion(on){onionEnabled=on;drawAll();}
@@ -1383,7 +1392,6 @@
 				gId('recBtn').classList.remove('recording');
 			}
 			animFrames=[];
-			lastAnimBlob=null;
 			selFrameIdx=-1;
 			stopAnimPreview();
 			gId('animPrvArea').style.display='none';
@@ -1428,7 +1436,6 @@
 				animFrames[selFrameIdx].pixels = captureMatrix();
 				animFrames[selFrameIdx].delay = dur;
 			}
-			lastAnimBlob = null;
 			updateSMFrameList();
 			showAnimPreview();
 	}
@@ -1437,7 +1444,6 @@
 			if(selFrameIdx<0)return;
 			const dur=Math.max(10,parseInt(gId('smDur').value)||200);
 			animFrames.splice(selFrameIdx,0,{pixels:captureMatrix(),delay:dur});
-			lastAnimBlob=null;
 			updateSMFrameList();
 			showAnimPreview();
 			updButtons();
@@ -1448,7 +1454,7 @@
 			// If ping-pong is enabled, create a reversed copy of frames (excluding last to avoid duplicate)
 			let exportFrames=animFrames;
 			if(pingPong&&animFrames.length>1){
-				exportFrames=animFrames.concat(animFrames.slice(0,-1).reverse());
+				exportFrames=animFrames.concat(animFrames.slice(1,-1).reverse());
 			}
 			const g=grid(w),gw=g.w,gh=Math.max(g.h,h),ppf=gw*gh;
 			const all=new Uint8Array(exportFrames.length*ppf*4);
@@ -1480,11 +1486,6 @@
 			}
 			wr.end();
 			return new Blob([new Uint8Array(gd)],{type:'image/gif'});
-		}
-
-		function getAnimBlob() {
-			if(!lastAnimBlob) lastAnimBlob=buildAnimGif();
-			return lastAnimBlob;
 		}
 
 		// note: deliberately not using showToast() from common.js to keep it independent from future upstream changes, it also requires almost the same amount of code in CSS
