@@ -80,6 +80,27 @@
         .file-label.has-file{
             color:#00f2ff;
         }
+        .font-nav{
+            grid-column:1/-1;
+            display:none;
+            align-items:center;
+            gap:8px;
+        }
+        .font-nav.active{display:flex}
+        .font-nav select{flex:1;min-width:0}
+        .font-nav button{
+            width:auto;
+            padding:8px 16px;
+            border-radius:8px;
+            flex:0 0 auto;
+        }
+        .font-nav span{
+            font-size:.75rem;
+            color:#00d4ff;
+            white-space:nowrap;
+            min-width:60px;
+            text-align:center;
+        }
         input,button,select{
             width:100%;
             padding:10px;
@@ -290,6 +311,12 @@
             <label style="font-size:.6rem;">&nbsp;TTF OTF WOFF BDF WBF</label>
         </div>
         <div>
+            <label>Font Folder</label>
+            <input type="file" id="fontDir" webkitdirectory directory multiple>
+            <label for="fontDir" class="file-label" id="dirLabel">Load Folder</label>
+            <label style="font-size:.6rem;">&nbsp;Browse all fonts in a folder</label>
+        </div>
+        <div>
             <label>Letter Spacing</label>
             <input type="number" id="spacing" value="1" min="0" max="9" oninput="spacing=parseInt(this.value);updatePixel();updateTTF();">
         </div>
@@ -308,6 +335,12 @@
         <div style="display:flex; align-items:center; gap:8px; padding-top:24px;">
             <input type="checkbox" id="fixedWidth" style="width:20px;" onchange="normalizeFont()">
             <label style="margin:0">FIXED FONT WIDTH</label>
+        </div>
+        <div class="font-nav" id="fontNav">
+            <button type="button" id="prevFont" title="Previous font (Left arrow)">&#9664;</button>
+            <select id="fontSelect"></select>
+            <button type="button" id="nextFont" title="Next font (Right arrow)">&#9654;</button>
+            <span id="fontCount"></span>
         </div>
      </div>
      <div id=ttfCont class="sliders">
@@ -435,7 +468,14 @@
         extension: $('extension'),
         utf8Offset: $('utf8Offset'),
         editModeBtn: $('editModeBtn'),
-        upBtn: $('upBtn')
+        upBtn: $('upBtn'),
+        fontDir: $('fontDir'),
+        dirLabel: $('dirLabel'),
+        fontNav: $('fontNav'),
+        fontSelect: $('fontSelect'),
+        fontCount: $('fontCount'),
+        prevFont: $('prevFont'),
+        nextFont: $('nextFont')
     };
 
     const SCALE = 4;
@@ -538,15 +578,20 @@
         if (customFontLoaded && !pixelFontMode) processFont();
     });
 
-    el.fontFile.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    // ---- font loading (single file or from folder list) ----
+    let loadToken = 0;      // guards against out-of-order async loads when switching fast
+    let fontFaceSeq = 0;
+    let currentFace = null;
+
+    async function loadFontFile(file) {
+        const token = ++loadToken;
         const fileLabel = document.getElementById('fileLabel');
         fileLabel.textContent = file.name;
         fileLabel.classList.add('has-file');
 
         const fileName = file.name.toLowerCase();
         fontName = file.name.replace(/\.[^.]+$/, '');
+        disabledGlyphs.clear();
         updateFileName();
         if (fileName.endsWith('.wbf')) {
             await loadWBF(file);
@@ -555,20 +600,90 @@
         } else {
             // TTF/OTF handling
             setPixelFontMode(false); // Reset to TTF mode
-            const fr = new FileReader();
-            fr.onload = () => {
-                const fontFace = new FontFace(fontName, fr.result);
-                fontFace.load().then(f => {
-                    document.fonts.add(f);
-                    currentFontFamily = fontName;
-                    customFontLoaded = true;
-                    processFont();
-                }).catch(err => {
-                    alert('Font load error: ' + err);
-                });
-            };
-            fr.readAsArrayBuffer(file);
+            try {
+                const buf = await file.arrayBuffer();
+                if (token !== loadToken) return;
+                // unique family name per load: names like "10x20" are not valid unquoted CSS and
+                // re-using one name would keep the previously loaded face
+                const family = 'ffont' + (++fontFaceSeq);
+                const f = await new FontFace(family, buf).load();
+                if (token !== loadToken) return;
+                if (currentFace) document.fonts.delete(currentFace);
+                document.fonts.add(f);
+                currentFace = f;
+                currentFontFamily = `"${family}"`;
+                customFontLoaded = true;
+                processFont();
+            } catch (err) {
+                alert('Font load error: ' + err);
+            }
         }
+    }
+
+    el.fontFile.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) loadFontFile(file);
+    });
+
+    // ---- folder browsing ----
+    const FONT_EXT = /\.(ttf|otf|woff2?|bdf|wbf)$/i;
+    let folderFonts = [];
+    let folderIdx = -1;
+
+    el.fontDir.addEventListener('change', (e) => {
+        const files = [...e.target.files].filter(f => FONT_EXT.test(f.name));
+        e.target.value = ''; // allow re-selecting the same folder
+        if (!files.length) { alert('No font files (TTF, OTF, WOFF, BDF, WBF) found in this folder'); return; }
+        const path = f => f.webkitRelativePath || f.name;
+        files.sort((a, b) => path(a).localeCompare(path(b), undefined, { numeric: true, sensitivity: 'base' }));
+        folderFonts = files;
+
+        // build dropdown, grouped by sub folder
+        const dirOf = f => { const p = path(f).split('/'); p.shift(); p.pop(); return p.join('/'); };
+        const groups = new Map();
+        files.forEach((f, i) => {
+            const d = dirOf(f);
+            if (!groups.has(d)) groups.set(d, []);
+            groups.get(d).push([i, f]);
+        });
+        el.fontSelect.innerHTML = '';
+        for (const [d, list] of groups) {
+            let parent = el.fontSelect;
+            if (groups.size > 1) {
+                parent = document.createElement('optgroup');
+                parent.label = d || '(root)';
+                el.fontSelect.appendChild(parent);
+            }
+            for (const [i, f] of list) {
+                const o = document.createElement('option');
+                o.value = i; o.textContent = f.name;
+                parent.appendChild(o);
+            }
+        }
+        const root = (files[0].webkitRelativePath || '').split('/')[0];
+        el.dirLabel.textContent = (root || 'Folder') + ' (' + files.length + ')';
+        el.dirLabel.classList.add('has-file');
+        el.fontNav.classList.add('active');
+        selectFolderFont(0);
+    });
+
+    function selectFolderFont(i) {
+        const n = folderFonts.length;
+        if (!n) return;
+        folderIdx = ((i % n) + n) % n;
+        el.fontSelect.value = folderIdx;
+        el.fontCount.textContent = (folderIdx + 1) + ' / ' + n;
+        loadFontFile(folderFonts[folderIdx]);
+    }
+
+    el.fontSelect.addEventListener('change', () => selectFolderFont(parseInt(el.fontSelect.value)));
+    el.prevFont.addEventListener('click', () => selectFolderFont(folderIdx - 1));
+    el.nextFont.addEventListener('click', () => selectFolderFont(folderIdx + 1));
+    document.addEventListener('keydown', (e) => {
+        if (!folderFonts.length || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+        if (e.key === 'ArrowLeft') { selectFolderFont(folderIdx - 1); e.preventDefault(); }
+        else if (e.key === 'ArrowRight') { selectFolderFont(folderIdx + 1); e.preventDefault(); }
     });
 
     el.spacing.addEventListener('change', () => {
@@ -1045,7 +1160,9 @@
     }
 
     async function loadWBF(file) {
+        const tok = loadToken;
         const arrayBuffer = await file.arrayBuffer();
+        if (tok !== loadToken) return;
         const data = new Uint8Array(arrayBuffer);
         if (data[0] !== 0x57) return alert('Invalid WBF file');
 
@@ -1092,7 +1209,10 @@
     }
 
     async function loadBDF(file) {
-        const text = await file.text(), lines = text.split('\n');
+        const tok = loadToken;
+        const text = await file.text();
+        if (tok !== loadToken) return;
+        const lines = text.split('\n');
         let glyphs = [], cur = null, inBmp = false, h = 0, bbx = null;
 
         for (let line of lines) {
